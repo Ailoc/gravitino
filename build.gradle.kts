@@ -1229,6 +1229,7 @@ tasks {
       ":catalogs:catalog-jdbc-doris:copyLibAndConfig",
       ":catalogs:catalog-jdbc-mysql:copyLibAndConfig",
       ":catalogs:catalog-jdbc-postgresql:copyLibAndConfig",
+      ":catalogs:catalog-jdbc-sqlserver:copyLibAndConfig",
       ":catalogs:catalog-jdbc-starrocks:copyLibAndConfig",
       ":catalogs:catalog-kafka:copyLibAndConfig",
       ":catalogs:catalog-lakehouse-hudi:copyLibAndConfig",
