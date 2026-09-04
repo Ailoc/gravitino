@@ -43,6 +43,9 @@ public class TestProviders {
     assertTrue(Providers.isValidProvider(Providers.HUDI), "HUDI should be a valid entity");
     assertTrue(
         Providers.isValidProvider(Providers.OCEANBASE), "OCEANBASE should be a valid entity");
+    assertTrue(Providers.isValidProvider(Providers.ORACLE), "ORACLE should be a valid entity");
+    assertTrue(
+        Providers.isValidProvider(Providers.SQLSERVER), "SQLSERVER should be a valid entity");
     assertTrue(Providers.isValidProvider(Providers.MODEL), "MODEL should be a valid entity");
   }
 
@@ -82,6 +85,8 @@ public class TestProviders {
     assertNotNull(Providers.internal(Providers.PAIMON), "Internal string should not be null");
     assertNotNull(Providers.internal(Providers.HUDI), "Internal string should not be null");
     assertNotNull(Providers.internal(Providers.OCEANBASE), "Internal string should not be null");
+    assertNotNull(Providers.internal(Providers.ORACLE), "Internal string should not be null");
+    assertNotNull(Providers.internal(Providers.SQLSERVER), "Internal string should not be null");
     assertNotNull(Providers.internal(Providers.MODEL), "Internal string should not be null");
   }
 
@@ -105,6 +110,8 @@ public class TestProviders {
     assertNotNull(Providers.catalogType(Providers.PAIMON), "Catalog type should not be null");
     assertNotNull(Providers.catalogType(Providers.HUDI), "Catalog type should not be null");
     assertNotNull(Providers.catalogType(Providers.OCEANBASE), "Catalog type should not be null");
+    assertNotNull(Providers.catalogType(Providers.ORACLE), "Catalog type should not be null");
+    assertNotNull(Providers.catalogType(Providers.SQLSERVER), "Catalog type should not be null");
     assertNotNull(Providers.catalogType(Providers.MODEL), "Catalog type should not be null");
   }
 
@@ -128,5 +135,15 @@ public class TestProviders {
         Catalog.Type.MODEL,
         Providers.catalogType(Providers.MODEL),
         "MODEL catalog type should be MODEL");
+  }
+
+  @Test
+  public void jdbcOracleAndSqlServerProviders() {
+    // These strings must match the catalogs' shortName() exactly; a mismatch only surfaces at
+    // runtime as an unsupported provider on the server.
+    assertEquals("jdbc-oracle", Providers.internal(Providers.ORACLE));
+    assertEquals("jdbc-sqlserver", Providers.internal(Providers.SQLSERVER));
+    assertEquals(Catalog.Type.RELATIONAL, Providers.catalogType(Providers.ORACLE));
+    assertEquals(Catalog.Type.RELATIONAL, Providers.catalogType(Providers.SQLSERVER));
   }
 }

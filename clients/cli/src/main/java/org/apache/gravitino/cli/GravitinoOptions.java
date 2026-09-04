@@ -156,7 +156,9 @@ public class GravitinoOptions {
     options.addOption(createArgOption("V", VALUE, "property value"));
     options.addOption(
         createArgOption(
-            "z", PROVIDER, "provider one of hadoop, hive, mysql, postgres, iceberg, kafka"));
+            "z",
+            PROVIDER,
+            "provider one of hadoop, hive, mysql, postgres, iceberg, kafka, oracle, sqlserver"));
     options.addOption(createArgOption("l", USER, "user name"));
     options.addOption(createArgOption("g", GROUP, "group name"));
     options.addOption(createArgOption(DATATYPE, "column data type"));

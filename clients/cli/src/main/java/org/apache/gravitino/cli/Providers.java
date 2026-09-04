@@ -47,6 +47,10 @@ public class Providers {
   public static final String HUDI = "hudi";
   /** Represents the OceanBase provider. */
   public static final String OCEANBASE = "oceanbase";
+  /** Represents the Oracle provider. */
+  public static final String ORACLE = "oracle";
+  /** Represents the SQL Server provider. */
+  public static final String SQLSERVER = "sqlserver";
   /** Represents the Model provider. */
   public static final String MODEL = "model";
 
@@ -63,6 +67,8 @@ public class Providers {
     VALID_PROVIDERS.add(PAIMON);
     VALID_PROVIDERS.add(HUDI);
     VALID_PROVIDERS.add(OCEANBASE);
+    VALID_PROVIDERS.add(ORACLE);
+    VALID_PROVIDERS.add(SQLSERVER);
     VALID_PROVIDERS.add(MODEL);
   }
 
@@ -104,6 +110,10 @@ public class Providers {
         return "lakehouse-hudi";
       case OCEANBASE:
         return "jdbc-oceanbase";
+      case ORACLE:
+        return "jdbc-oracle";
+      case SQLSERVER:
+        return "jdbc-sqlserver";
       case MODEL:
         return "model";
       default:
@@ -129,6 +139,8 @@ public class Providers {
       case PAIMON:
       case HUDI:
       case OCEANBASE:
+      case ORACLE:
+      case SQLSERVER:
         return Catalog.Type.RELATIONAL;
       case KAFKA:
         return Catalog.Type.MESSAGING;
