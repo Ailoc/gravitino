@@ -142,6 +142,8 @@ export const UnsupportColumnType = {
     'uuid'
   ],
   'jdbc-postgresql': ['fixed', 'byte', 'struct', 'map', 'interval_day', 'interval_year', 'union', 'uuid'],
+  'jdbc-oracle': ['fixed', 'interval_day', 'interval_year', 'list', 'map', 'struct', 'time', 'union', 'uuid'],
+  'jdbc-sqlserver': ['fixed', 'interval_day', 'interval_year', 'list', 'map', 'struct', 'union'],
   'jdbc-doris': [
     'fixed',
     'struct',
@@ -207,6 +209,16 @@ const tableLevelPropInfoMap = {
     allowAdd: true
   },
   'jdbc-postgresql': {
+    reserved: [],
+    immutable: [],
+    allowAdd: false
+  },
+  'jdbc-oracle': {
+    reserved: [],
+    immutable: [],
+    allowAdd: false
+  },
+  'jdbc-sqlserver': {
     reserved: [],
     immutable: [],
     allowAdd: false
@@ -326,7 +338,9 @@ export const indexesInfoMap = {
   'jdbc-starrocks': ['primary_key'],
   'jdbc-mysql': ['primary_key', 'unique_key'],
   'jdbc-oceanbase': ['primary_key', 'unique_key'],
+  'jdbc-oracle': ['primary_key', 'unique_key'],
   'jdbc-postgresql': ['primary_key', 'unique_key'],
+  'jdbc-sqlserver': ['primary_key', 'unique_key'],
   'lakehouse-paimon': ['primary_key'],
   'jdbc-clickhouse': ['primary_key']
 }
@@ -340,10 +354,26 @@ export const autoIncrementInfoMap = {
     notNullCheck: true,
     uniqueCheck: true
   },
+  'jdbc-oracle': {
+    notNullCheck: true,
+    uniqueCheck: false
+  },
   'jdbc-postgresql': {
+    notNullCheck: true,
+    uniqueCheck: false
+  },
+  'jdbc-sqlserver': {
     notNullCheck: true,
     uniqueCheck: false
   }
 }
 
-export const defaultValueSupported = ['jdbc-doris', 'jdbc-mysql', 'jdbc-oceanbase', 'jdbc-postgresql', 'jdbc-starrocks']
+export const defaultValueSupported = [
+  'jdbc-doris',
+  'jdbc-mysql',
+  'jdbc-oceanbase',
+  'jdbc-oracle',
+  'jdbc-postgresql',
+  'jdbc-sqlserver',
+  'jdbc-starrocks'
+]

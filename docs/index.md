@@ -86,9 +86,11 @@ Gravitino supports the following catalogs:
 * [**Hive catalog**](./apache-hive-catalog.md)
 * [**Iceberg catalog**](./lakehouse-iceberg-catalog.md)
 * [**MySQL catalog**](./jdbc-mysql-catalog.md)
+* [**Oracle catalog**](./jdbc-oracle-catalog.md)
 * [**Paimon catalog**](./lakehouse-paimon-catalog.md)
 * [**PostgreSQL catalog**](./jdbc-postgresql-catalog.md)
 * [**OceanBase catalog**](./jdbc-oceanbase-catalog.md)\*
+* [**SQL Server catalog**](./jdbc-sqlserver-catalog.md)
 * [**StarRocks catalog**](./jdbc-starrocks-catalog.md)
 * [**ClickHouse catalog**](./jdbc-clickhouse-catalog.md)\*
 * [**Lakehouse generic catalog**](./lakehouse-generic-catalog.md)
@@ -145,9 +147,11 @@ Gravitino supports different catalogs to manage the metadata in different source
 * [Kafka catalog](./kafka-catalog.md): a complete guide to using Gravitino to manage Kafka topics metadata.
 * [Model catalog](./model-catalog.md): a complete guide to using Gravitino to manage model metadata.
 * [MySQL catalog](./jdbc-mysql-catalog.md): a complete guide to using Gravitino to manage MySQL data.
+* [Oracle catalog](./jdbc-oracle-catalog.md): a complete guide to using Gravitino to manage Oracle data.
 * [Paimon catalog](./lakehouse-paimon-catalog.md): a complete guide to using Gravitino to manage Apache Paimon data.
 * [PostgreSQL catalog](./jdbc-postgresql-catalog.md): a complete guide to using Gravitino to manage PostgreSQL data.
 * [OceanBase catalog](./jdbc-oceanbase-catalog.md): a complete guide to using Gravitino to manage OceanBase data.
+* [SQL Server catalog](./jdbc-sqlserver-catalog.md): a complete guide to using Gravitino to manage SQL Server data.
 * [ClickHouse catalog](./jdbc-clickhouse-catalog.md): a complete guide to using Gravitino to manage ClickHouse data.
 * [Lakehouse generic catalog](./lakehouse-generic-catalog.md): a complete guide to using Gravitino to manage lakehouse data sources.
 

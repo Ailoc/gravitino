@@ -12,7 +12,9 @@ The catalogs currently supported by the Apache Gravitino Trino connector are as 
 - [Hive](catalog-hive.md)
 - [Iceberg](catalog-iceberg.md)
 - [MySQL](catalog-mysql.md)
+- [Oracle](catalog-oracle.md)
 - [PostgreSQL](catalog-postgresql.md)
+- [SQL Server](catalog-sqlserver.md)
 - [AWS Glue](catalog-glue.md)
 
 ## Create Catalog
@@ -28,7 +30,7 @@ create_catalog(CATALOG varchar, PROVIDER varchar, PROPERTIES MAP(VARCHAR, VARCHA
 ```
 
 - CATALOG: The catalog name to be created.
-- PROVIDER: The catalog provider. Supported values: `hive`, `lakehouse-iceberg`, `jdbc-mysql`, `jdbc-postgresql`, `glue`.
+- PROVIDER: The catalog provider. Supported values: `hive`, `lakehouse-iceberg`, `jdbc-mysql`, `jdbc-oracle`, `jdbc-postgresql`, `jdbc-sqlserver`, `glue`.
 - PROPERTIES: The properties of the catalog.
 - IGNORE_EXIST: The flag to ignore the error if the catalog already exists. It's optional, the default value is `false`.
 
@@ -36,7 +38,9 @@ The type of catalog properties reference:
 - [Hive catalog](../apache-hive-catalog.md#catalog-properties)
 - [Iceberg catalog](../lakehouse-iceberg-catalog.md#catalog-properties)
 - [MySQL catalog](../jdbc-mysql-catalog.md#catalog-properties)
+- [Oracle catalog](../jdbc-oracle-catalog.md#catalog-properties)
 - [PostgreSQL catalog](../jdbc-postgresql-catalog.md#catalog-properties)
+- [SQL Server catalog](../jdbc-sqlserver-catalog.md#catalog-properties)
 - [AWS Glue catalog](../aws-glue-catalog.md#catalog-properties)
 
 
@@ -213,12 +217,15 @@ More Trino connector configurations can refer to:
 - [Hive catalog](https://trino.io/docs/current/connector/hive.html#hive-general-configuration-properties)
 - [Iceberg catalog](https://trino.io/docs/current/connector/iceberg.html#general-configuration)
 - [MySQL catalog](https://trino.io/docs/current/connector/mysql.html#general-configuration-properties)
+- [Oracle catalog](https://trino.io/docs/current/connector/oracle.html#general-configuration-properties)
 - [PostgreSQL catalog](https://trino.io/docs/current/connector/postgresql.html#general-configuration-properties)
+- [SQL Server catalog](https://trino.io/docs/current/connector/sqlserver.html#general-configuration-properties)
 
 ## Data Type Mapping Between Trino and Apache Gravitino
 
 Gravitino Trino connector supports the following data type conversions between Trino and Gravitino currently. Depending on the detailed catalog, Gravitino may not support some data types conversion for this specific catalog, for example,
-Hive does not support `TIME` data type.
+Hive and Oracle do not support the `TIME` data type, and Oracle and SQL Server reject a temporal precision
+greater than 9 and 7 respectively, while Trino allows up to 12.
 
 | Gravitino Type        | Trino Type               |
 |-----------------------|--------------------------|

@@ -317,6 +317,34 @@ export const providers = [
     ]
   },
   {
+    label: 'Oracle',
+    value: 'jdbc-oracle',
+    defaultProps: [
+      {
+        key: 'jdbc-driver',
+        value: '',
+        required: true,
+        description: 'e.g. oracle.jdbc.OracleDriver'
+      },
+      {
+        key: 'jdbc-url',
+        value: '',
+        required: true,
+        description: 'e.g. jdbc:oracle:thin:@//localhost:1521/ORCLPDB1'
+      },
+      {
+        key: 'jdbc-user',
+        value: '',
+        required: true
+      },
+      {
+        key: 'jdbc-password',
+        value: '',
+        required: true
+      }
+    ]
+  },
+  {
     label: 'PostgreSQL',
     value: 'jdbc-postgresql',
     defaultProps: [
@@ -331,6 +359,39 @@ export const providers = [
         value: '',
         required: true,
         description: 'e.g. jdbc:postgresql://localhost:5432/your_database'
+      },
+      {
+        key: 'jdbc-user',
+        value: '',
+        required: true
+      },
+      {
+        key: 'jdbc-password',
+        value: '',
+        required: true
+      },
+      {
+        key: 'jdbc-database',
+        value: '',
+        required: true
+      }
+    ]
+  },
+  {
+    label: 'SQL Server',
+    value: 'jdbc-sqlserver',
+    defaultProps: [
+      {
+        key: 'jdbc-driver',
+        value: '',
+        required: true,
+        description: 'e.g. com.microsoft.sqlserver.jdbc.SQLServerDriver'
+      },
+      {
+        key: 'jdbc-url',
+        value: '',
+        required: true,
+        description: 'e.g. jdbc:sqlserver://localhost:1433;databaseName=your_database'
       },
       {
         key: 'jdbc-user',
@@ -649,6 +710,42 @@ const relationalColumnTypeMap = {
     'time',
     'timestamp',
     'varchar'
+  ],
+  'jdbc-oracle': [
+    'binary',
+    'boolean',
+    'byte',
+    'char',
+    'date',
+    'decimal',
+    'double',
+    'float',
+    'integer',
+    'long',
+    'short',
+    'string',
+    'timestamp',
+    'timestamp_tz',
+    'varchar'
+  ],
+  'jdbc-sqlserver': [
+    'binary',
+    'boolean',
+    'byte',
+    'char',
+    'date',
+    'decimal',
+    'double',
+    'float',
+    'integer',
+    'long',
+    'short',
+    'string',
+    'time',
+    'timestamp',
+    'timestamp_tz',
+    'uuid',
+    'varchar'
   ]
 }
 
@@ -701,6 +798,18 @@ const relationalTablePropInfoMap = {
     allowAdd: false
   },
   'jdbc-postgresql': {
+    reserved: [],
+    immutable: [],
+    allowDelete: false,
+    allowAdd: false
+  },
+  'jdbc-oracle': {
+    reserved: [],
+    immutable: [],
+    allowDelete: false,
+    allowAdd: false
+  },
+  'jdbc-sqlserver': {
     reserved: [],
     immutable: [],
     allowDelete: false,

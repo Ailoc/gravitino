@@ -40,6 +40,8 @@ The Gravitino binary distribution package contains the following files:
     |   └── jdbc-mysql/                         # JDBC MySQL catalog dependencies and configurations.
     |   └── jdbc-starrocks/                     # JDBC Starrocks catalog dependencies and configurations.
     |   └── jdbc-postgresql/                    # JDBC PostgreSQL catalog dependencies and configurations.
+    |   └── jdbc-oracle/                        # JDBC Oracle catalog dependencies and configurations.
+    |   └── jdbc-sqlserver/                     # JDBC SQL Server catalog dependencies and configurations.
     |   └── jdbc-hudi/                          # Hudi catalog dependencies and configurations.
     |   └── kafka/                              # Apache Kafka catalog dependencies and configurations.
     |   └── lakehouse-iceberg/                  # Apache Iceberg catalog dependencies and configurations.

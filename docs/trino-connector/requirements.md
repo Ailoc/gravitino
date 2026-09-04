@@ -14,6 +14,6 @@ To install and deploy the Apache Gravitino Trino connector, the following enviro
 - If you use an unsupported Trino version, you can set `gravitino.trino.skip-version-validation` to `true`.
   Unsupported versions have not undergone thorough testing.
 - Ensure that all nodes running Trino can access the Gravitino server's port, which defaults to 8090.
-- Ensure that all nodes running Trino can access the real catalogs resources, such as Hive, Iceberg, MySQL, PostgreSQL, etc.
-- Ensure that you have installed the following connectors in Trino: Hive, Iceberg, MySQL, PostgreSQL.
+- Ensure that all nodes running Trino can access the real catalogs resources, such as Hive, Iceberg, MySQL, Oracle, PostgreSQL, SQL Server, etc.
+- Ensure that you have installed the following connectors in Trino: Hive, Iceberg, MySQL, Oracle, PostgreSQL, SQL Server.
 - Ensure that you have set the `catalog.management` to `dynamic` in the Trino coordinator configuration.

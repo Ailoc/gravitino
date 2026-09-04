@@ -743,7 +743,9 @@ export default function SchemaDetailsPage() {
               <a className='text-defaultPrimary'>0</a>
             )}
           </Space>
-          {!['jdbc-postgresql', 'lakehouse-paimon', 'kafka', 'jdbc-mysql'].includes(catalogData?.provider) && (
+          {!['jdbc-postgresql', 'lakehouse-paimon', 'kafka', 'jdbc-mysql', 'jdbc-oracle', 'jdbc-sqlserver'].includes(
+            catalogData?.provider
+          ) && (
             <Space size={4}>
               <Tooltip title='Properties' placement='top'>
                 <Icons.TableProperties className='size-4' color='grey' />

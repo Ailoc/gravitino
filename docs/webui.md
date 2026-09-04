@@ -166,7 +166,7 @@ Creating a catalog requires these fields:
 1. **Catalog name**(**_required_**): the name of the catalog
 2. **Type**(**_required_**): `relational`/`fileset`/`messaging`/`model`, the default value is `relational`
 3. **Provider**(**_required_**):
-    1. Type `relational` - `hive`/`iceberg`/`mysql`/`postgresql`/`doris`/`paimon`/`hudi`/`oceanbase`/`hologres`
+    1. Type `relational` - `hive`/`iceberg`/`mysql`/`oracle`/`postgresql`/`sqlserver`/`doris`/`paimon`/`hudi`/`oceanbase`/`hologres`
     2. Type `fileset` has no provider
     3. Type `messaging` - `kafka`
     4. Type `model` has no provider
@@ -248,6 +248,17 @@ Creating a catalog requires these fields:
     |jdbc-password|The JDBC password                                                                                  |
 
   </TabItem>
+  <TabItem value='oracle' label='Oracle'>
+    Follow the [JDBC Oracle catalog](./jdbc-oracle-catalog.md) document.
+
+    |Key          |Description                                          |
+    |-------------|-----------------------------------------------------|
+    |jdbc-driver  |e.g. `oracle.jdbc.OracleDriver`                      |
+    |jdbc-url     |e.g. `jdbc:oracle:thin:@//localhost:1521/ORCLPDB1`   |
+    |jdbc-user    |The JDBC user name                                   |
+    |jdbc-password|The JDBC password                                    |
+
+  </TabItem>
   <TabItem value='postgresql' label='PostgreSQL'>
     Follow the [JDBC PostgreSQL catalog](./jdbc-postgresql-catalog) document.
 
@@ -260,6 +271,18 @@ Creating a catalog requires these fields:
     |jdbc-user    |The JDBC user name                                   |
     |jdbc-password|The JDBC password                                    |
     |jdbc-database|e.g. `pg_database`                                   |
+
+  </TabItem>
+  <TabItem value='sqlserver' label='SQL Server'>
+    Follow the [JDBC SQL Server catalog](./jdbc-sqlserver-catalog.md) document.
+
+    |Key          |Description                                                          |
+    |-------------|---------------------------------------------------------------------|
+    |jdbc-driver  |e.g. `com.microsoft.sqlserver.jdbc.SQLServerDriver`                  |
+    |jdbc-url     |e.g. `jdbc:sqlserver://localhost:1433;databaseName=your_database`    |
+    |jdbc-user    |The JDBC user name                                                   |
+    |jdbc-password|The JDBC password                                                    |
+    |jdbc-database|e.g. `your_database`                                                 |
 
   </TabItem>
   <TabItem value='doris' label='Doris'>

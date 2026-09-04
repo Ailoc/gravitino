@@ -588,6 +588,8 @@ classpath automatically, which is also where provider-specific files such as `hd
 | `jdbc-postgresql`   | [PostgreSQL catalog properties](jdbc-postgresql-catalog.md#catalog-properties)          | `catalogs/jdbc-postgresql/conf/jdbc-postgresql.conf`     |
 | `jdbc-doris`        | [Doris catalog properties](jdbc-doris-catalog.md#catalog-properties)                    | `catalogs/jdbc-doris/conf/jdbc-doris.conf`               |
 | `jdbc-starrocks`    | [StarRocks catalog properties](jdbc-starrocks-catalog.md#catalog-properties)            | `catalogs/jdbc-starrocks/conf/jdbc-starrocks.conf`       |
+| `jdbc-oracle`       | [Oracle catalog properties](jdbc-oracle-catalog.md#catalog-properties)                  | `catalogs/jdbc-oracle/conf/jdbc-oracle.conf`             |
+| `jdbc-sqlserver`    | [SQL Server catalog properties](jdbc-sqlserver-catalog.md#catalog-properties)           | `catalogs/jdbc-sqlserver/conf/jdbc-sqlserver.conf`       |
 | `jdbc-clickhouse` ‡ | [ClickHouse catalog properties](jdbc-clickhouse-catalog.md#catalog-properties)          | `catalogs/jdbc-clickhouse/conf/jdbc-clickhouse.conf`     |
 | `jdbc-hologres` ‡   | [Hologres catalog properties](jdbc-hologres-catalog.md#catalog-properties)              | `catalogs/jdbc-hologres/conf/jdbc-hologres.conf`         |
 | `jdbc-oceanbase` ‡  | [OceanBase catalog properties](jdbc-oceanbase-catalog.md#catalog-properties)            | `catalogs/jdbc-oceanbase/conf/jdbc-oceanbase.conf`       |

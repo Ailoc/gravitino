@@ -284,7 +284,8 @@ export default function CreateSchemaDialog({ ...props }) {
                 >
                   <Input placeholder={mismatchName} disabled={editSchema} />
                 </Form.Item>
-                {(!['jdbc-mysql', 'lakehouse-paimon', 'jdbc-oceanbase'].includes(provider) || paimonCatalogBackend) && (
+                {(!['jdbc-mysql', 'lakehouse-paimon', 'jdbc-oceanbase', 'jdbc-oracle'].includes(provider) ||
+                  paimonCatalogBackend) && (
                   <Form.Item name='comment' label='Comment' data-refer='schema-comment-field'>
                     <TextArea disabled={editSchema} />
                   </Form.Item>
@@ -299,7 +300,14 @@ export default function CreateSchemaDialog({ ...props }) {
                     <Input placeholder='s3://my-bucket/path' />
                   </Form.Item>
                 ) : (
-                  (!['jdbc-postgresql', 'lakehouse-paimon', 'kafka', 'jdbc-mysql'].includes(provider) ||
+                  (![
+                    'jdbc-postgresql',
+                    'lakehouse-paimon',
+                    'kafka',
+                    'jdbc-mysql',
+                    'jdbc-oracle',
+                    'jdbc-sqlserver'
+                  ].includes(provider) ||
                     paimonCatalogBackend) && (
                     <Form.Item label='Properties'>
                       <Form.List name='properties'>

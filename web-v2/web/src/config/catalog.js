@@ -607,6 +607,43 @@ export const providerBase = {
       }
     ]
   },
+  'jdbc-sqlserver': {
+    label: 'SQL Server',
+    defaultProps: [
+      {
+        label: 'JDBC Driver',
+        key: 'jdbc-driver',
+        value: '',
+        required: true,
+        description: 'e.g. com.microsoft.sqlserver.jdbc.SQLServerDriver'
+      },
+      {
+        label: 'JDBC URL',
+        key: 'jdbc-url',
+        value: '',
+        required: true,
+        description: 'e.g. jdbc:sqlserver://localhost:1433;databaseName=your_database'
+      },
+      {
+        label: 'JDBC User',
+        key: 'jdbc-user',
+        value: '',
+        required: true
+      },
+      {
+        label: 'JDBC Password',
+        key: 'jdbc-password',
+        value: '',
+        required: true
+      },
+      {
+        label: 'JDBC Database',
+        key: 'jdbc-database',
+        value: '',
+        required: true
+      }
+    ]
+  },
   'jdbc-doris': {
     label: 'Apache Doris',
     defaultProps: [
@@ -845,6 +882,37 @@ export const providerBase = {
       }
     ]
   },
+  'jdbc-oracle': {
+    label: 'Oracle',
+    defaultProps: [
+      {
+        label: 'JDBC Driver',
+        key: 'jdbc-driver',
+        value: '',
+        required: true,
+        description: 'e.g. oracle.jdbc.OracleDriver'
+      },
+      {
+        label: 'JDBC URL',
+        key: 'jdbc-url',
+        value: '',
+        required: true,
+        description: 'e.g. jdbc:oracle:thin:@//localhost:1521/ORCLPDB1'
+      },
+      {
+        label: 'JDBC User',
+        key: 'jdbc-user',
+        value: '',
+        required: true
+      },
+      {
+        label: 'JDBC Password',
+        key: 'jdbc-password',
+        value: '',
+        required: true
+      }
+    ]
+  },
   hadoop: {
     label: 'Apache Hadoop',
     defaultProps: []
@@ -940,9 +1008,19 @@ export const relationalProviders = [
     description: 'The multi-cloud distributed database for mission-critical workloads at any scale'
   },
   {
+    label: 'Oracle',
+    value: 'jdbc-oracle',
+    description: 'A multi-model database for enterprise workloads'
+  },
+  {
     label: 'PostgreSQL',
     value: 'jdbc-postgresql',
     description: "The world's most advanced open source relational database"
+  },
+  {
+    label: 'SQL Server',
+    value: 'jdbc-sqlserver',
+    description: 'A relational database management system from Microsoft'
   },
   {
     label: 'StarRocks',

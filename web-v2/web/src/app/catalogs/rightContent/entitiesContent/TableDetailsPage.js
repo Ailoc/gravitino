@@ -497,7 +497,7 @@ export default function TableDetailsPage({ ...props }) {
               <a className='text-defaultPrimary'>0</a>
             )}
           </Space>
-          {!['jdbc-postgresql'].includes(catalogData?.catalog?.provider) && (
+          {!['jdbc-oracle', 'jdbc-postgresql', 'jdbc-sqlserver'].includes(catalogData?.catalog?.provider) && (
             <Space size={4}>
               <Tooltip title='Properties' placement='top'>
                 <Icons.TableProperties className='size-4' color='grey' />

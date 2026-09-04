@@ -283,7 +283,9 @@ const CreateSchemaDialog = props => {
               </FormControl>
             </Grid>
 
-            {(!['jdbc-mysql', 'lakehouse-paimon', 'jdbc-oceanbase'].includes(activatedCatalogDetail?.provider) ||
+            {(!['jdbc-mysql', 'lakehouse-paimon', 'jdbc-oceanbase', 'jdbc-oracle'].includes(
+              activatedCatalogDetail?.provider
+            ) ||
               paimonCatalogBackend) && (
               <Grid item xs={12}>
                 <FormControl fullWidth>
@@ -309,9 +311,15 @@ const CreateSchemaDialog = props => {
               </Grid>
             )}
 
-            {(!['jdbc-postgresql', 'lakehouse-paimon', 'kafka', 'jdbc-mysql', 'jdbc-oceanbase'].includes(
-              activatedCatalogDetail?.provider
-            ) ||
+            {(![
+              'jdbc-postgresql',
+              'lakehouse-paimon',
+              'kafka',
+              'jdbc-mysql',
+              'jdbc-oceanbase',
+              'jdbc-oracle',
+              'jdbc-sqlserver'
+            ].includes(activatedCatalogDetail?.provider) ||
               paimonCatalogBackend) && (
               <Grid item xs={12} data-refer='schema-props-layout'>
                 <Typography sx={{ mb: 2 }} variant='body2'>
@@ -392,9 +400,15 @@ const CreateSchemaDialog = props => {
               </Grid>
             )}
 
-            {(!['jdbc-postgresql', 'lakehouse-paimon', 'kafka', 'jdbc-mysql', 'jdbc-oceanbase'].includes(
-              activatedCatalogDetail?.provider
-            ) ||
+            {(![
+              'jdbc-postgresql',
+              'lakehouse-paimon',
+              'kafka',
+              'jdbc-mysql',
+              'jdbc-oceanbase',
+              'jdbc-oracle',
+              'jdbc-sqlserver'
+            ].includes(activatedCatalogDetail?.provider) ||
               paimonCatalogBackend) && (
               <Grid item xs={12}>
                 <Button

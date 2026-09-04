@@ -386,6 +386,8 @@ components:
             - jdbc-mysql
             - jdbc-postgresql
             - jdbc-doris
+            - jdbc-oracle
+            - jdbc-sqlserver
             - fileset
             - kafka
             - model
@@ -460,6 +462,8 @@ components:
             - jdbc-postgresql
             - jdbc-doris
             - jdbc-oceanbase
+            - jdbc-oracle
+            - jdbc-sqlserver
             - kafka
         comment:
           type: string
