@@ -32,6 +32,7 @@ import static org.apache.gravitino.catalog.sqlserver.converter.SqlServerTypeConv
 import static org.apache.gravitino.catalog.sqlserver.converter.SqlServerTypeConverter.DEFAULT_MONEY_PRECISION;
 import static org.apache.gravitino.catalog.sqlserver.converter.SqlServerTypeConverter.DEFAULT_SMALLMONEY_PRECISION;
 import static org.apache.gravitino.catalog.sqlserver.converter.SqlServerTypeConverter.FLOAT;
+import static org.apache.gravitino.catalog.sqlserver.converter.SqlServerTypeConverter.IDENTITY_MARKER;
 import static org.apache.gravitino.catalog.sqlserver.converter.SqlServerTypeConverter.IMAGE;
 import static org.apache.gravitino.catalog.sqlserver.converter.SqlServerTypeConverter.INT;
 import static org.apache.gravitino.catalog.sqlserver.converter.SqlServerTypeConverter.MONEY;
@@ -72,6 +73,23 @@ public class TestSqlServerTypeConverter {
     checkToGravitino(Types.LongType.get(), BIGINT, null, null);
     checkToGravitino(Types.FloatType.get(), REAL, null, null);
     checkToGravitino(Types.DoubleType.get(), FLOAT, null, null);
+  }
+
+  /**
+   * The driver folds the identity property into the type name, reporting {@code bigint identity}
+   * rather than {@code bigint}. Identity is a property of the column and not a type of its own, and
+   * Gravitino carries it as the column's auto-increment flag, so the marker has to be stripped
+   * before the name is matched or the column degrades to an external type.
+   */
+  @Test
+  public void testIdentityMarkerIsStrippedFromTypeName() {
+    Assertions.assertEquals(" identity", IDENTITY_MARKER);
+    checkToGravitino(Types.IntegerType.get(), INT + IDENTITY_MARKER, null, null);
+    checkToGravitino(Types.LongType.get(), BIGINT + IDENTITY_MARKER, null, null);
+    checkToGravitino(Types.ShortType.get(), SMALLINT + IDENTITY_MARKER, null, null);
+    Assertions.assertNotEquals(
+        Types.ExternalType.of(BIGINT + IDENTITY_MARKER),
+        CONVERTER.toGravitino(typeBean(BIGINT + IDENTITY_MARKER)));
   }
 
   /**

@@ -55,16 +55,24 @@ import org.apache.gravitino.meta.AuditInfo;
  * named by {@code jdbc-user} must hold.
  *
  * <p>Oracle also has no catalog level above the schema, so the driver reports {@code null} from
- * {@link Connection#getCatalog()} and rejects {@link Connection#setCatalog}. The schema is selected
- * per connection with {@link Connection#setSchema}, which the driver implements as {@code ALTER
- * SESSION SET CURRENT_SCHEMA}, letting the table operations issue unqualified DDL.
+ * {@link Connection#getCatalog()} and accepts {@link Connection#setCatalog} only to ignore it. The
+ * schema is selected per connection with {@link Connection#setSchema}, which the driver implements
+ * as {@code ALTER SESSION SET CURRENT_SCHEMA}, letting the table operations issue unqualified DDL.
  */
 public class OracleSchemaOperations extends JdbcDatabaseOperations {
 
   /**
-   * Schemas owned by Oracle itself. {@link DatabaseMetaData#getSchemas} reports every schema the
-   * connecting account can see, which in a default database is dominated by these. The name
-   * capability check reads this set to reject attempts at reusing a reserved name.
+   * Names Oracle reserves for its own accounts. Used to reject a reserved name when a schema is
+   * created or renamed, and to filter {@link #listDatabases} alongside the {@code
+   * ORACLE_MAINTAINED} flag.
+   *
+   * <p>The flag carries most of the weight, because a hand kept list falls behind every time Oracle
+   * ships a new internal account. It is not the whole answer though: Oracle leaves a few of its own
+   * accounts unmarked. {@code PDBADMIN}, which creating a pluggable database leaves behind, reports
+   * {@code ORACLE_MAINTAINED = 'N'} on Oracle Database Free release 23.26, and no other {@code
+   * ALL_USERS} column separates it from a schema a user owns, so it is named here. Being incomplete
+   * is harmless for the create path, since Oracle itself rejects a {@code CREATE USER} that
+   * collides with an existing account.
    */
   public static final Set<String> SYSTEM_SCHEMAS =
       ImmutableSet.<String>builder()
@@ -126,6 +134,17 @@ public class OracleSchemaOperations extends JdbcDatabaseOperations {
           + "WHERE PROPERTY_NAME = 'DEFAULT_PERMANENT_TABLESPACE'";
 
   /**
+   * Selects the schemas Oracle does not mark as its own.
+   *
+   * <p>{@code ALL_USERS.ORACLE_MAINTAINED} is the marker Oracle keeps for exactly this distinction
+   * and has existed since 12c, which this catalog already requires. Filtering on it here removes
+   * the bulk of Oracle's accounts without naming them, which no static list manages across
+   * releases. {@link #SYSTEM_SCHEMAS} then removes the few Oracle ships unmarked.
+   */
+  private static final String USER_SCHEMAS_SQL =
+      "SELECT USERNAME FROM ALL_USERS WHERE ORACLE_MAINTAINED = 'N' ORDER BY USERNAME";
+
+  /**
    * Creates an Oracle schema, then gives it a tablespace quota so that it can hold tables.
    *
    * <p>The base implementation dereferences {@link Connection#getCatalog()}, which is {@code null}
@@ -178,14 +197,23 @@ public class OracleSchemaOperations extends JdbcDatabaseOperations {
     }
   }
 
+  /**
+   * Lists the schemas a user owns, which is what Gravitino exposes.
+   *
+   * <p>Reads {@code ALL_USERS} rather than {@link DatabaseMetaData#getSchemas}, which reports every
+   * schema the account can see with nothing saying which of them belong to Oracle. The query
+   * filters on {@code ORACLE_MAINTAINED} and {@link #isReservedSchema} filters out the accounts
+   * Oracle leaves unmarked.
+   */
   @Override
   public List<String> listDatabases() {
     List<String> result = new ArrayList<>();
     try (Connection connection = getConnection();
-        ResultSet resultSet = getSchemas(connection, null)) {
+        PreparedStatement statement = connection.prepareStatement(USER_SCHEMAS_SQL);
+        ResultSet resultSet = statement.executeQuery()) {
       while (resultSet.next()) {
         String schemaName = resultSet.getString(1);
-        if (!isSystemDatabase(schemaName)) {
+        if (!isReservedSchema(schemaName)) {
           result.add(schemaName);
         }
       }

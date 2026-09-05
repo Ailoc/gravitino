@@ -26,6 +26,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Locale;
 import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.apache.gravitino.catalog.jdbc.converter.JdbcColumnDefaultValueConverter;
 import org.apache.gravitino.catalog.jdbc.converter.JdbcTypeConverter;
@@ -71,6 +72,28 @@ public class OracleColumnDefaultValueConverter extends JdbcColumnDefaultValueCon
   /** A bare numeric default, which Oracle stores unquoted. */
   private static final Pattern NUMERIC_LITERAL =
       Pattern.compile("[+-]?(\\d+\\.?\\d*|\\.\\d+)([eE][+-]?\\d+)?");
+
+  /**
+   * The {@code TO_DATE} call {@link #fromGravitino} writes for a date default, matched so the value
+   * survives the round trip. The format mask is captured but deliberately not interpreted.
+   */
+  private static final Pattern TO_DATE_CALL =
+      Pattern.compile(
+          "TO_DATE\\s*\\(\\s*'((?:[^']|'')*)'\\s*,\\s*'[^']*'\\s*\\)", Pattern.CASE_INSENSITIVE);
+
+  /** The {@code TO_TIMESTAMP} call {@link #fromGravitino} writes for a timestamp default. */
+  private static final Pattern TO_TIMESTAMP_CALL =
+      Pattern.compile(
+          "TO_TIMESTAMP\\s*\\(\\s*'((?:[^']|'')*)'\\s*,\\s*'[^']*'\\s*\\)",
+          Pattern.CASE_INSENSITIVE);
+
+  /**
+   * The default Oracle attaches to an identity column: the {@code NEXTVAL} of a sequence it names
+   * {@code ISEQ$$_} followed by the table's object id, usually qualified by the schema.
+   */
+  private static final Pattern IDENTITY_SEQUENCE_DEFAULT =
+      Pattern.compile(
+          "(?:\"?[\\w$#]+\"?\\.)?\"?ISEQ\\$\\$_\\d+\"?\\.NEXTVAL", Pattern.CASE_INSENSITIVE);
 
   /** Shares the column type mapping, so a decimal default carries its own column's precision. */
   private static final OracleTypeConverter TYPE_CONVERTER = new OracleTypeConverter();
@@ -118,7 +141,7 @@ public class OracleColumnDefaultValueConverter extends JdbcColumnDefaultValueCon
       throw new UnsupportedOperationException(
           "Oracle has no time-of-day type, so a TIME column cannot carry a default value.");
     }
-    return quoteLiteral(String.valueOf(literal.value()));
+    return quoteLiteral(literal.value());
   }
 
   @Override
@@ -141,6 +164,20 @@ public class OracleColumnDefaultValueConverter extends JdbcColumnDefaultValueCon
       return Literals.NULL;
     }
 
+    if (IDENTITY_SEQUENCE_DEFAULT.matcher(value).matches()) {
+      // An identity column's default is the NEXTVAL of a sequence Oracle names after the table's
+      // object id. The user never chose it and the name is not stable across a table rebuild, so it
+      // reads back as no default; the auto-increment flag carries the information instead.
+      return DEFAULT_VALUE_NOT_SET;
+    }
+
+    String temporalArgument = temporalLiteralArgument(value);
+    if (temporalArgument != null) {
+      // Parsed by the column's own type, so a DATE column yields a timestamp of precision zero and
+      // a TIMESTAMP column yields the precision it was declared with.
+      return parseOrUnparsed(type, temporalArgument, columnDefaultValue);
+    }
+
     String unquoted = unquote(value);
     if (unquoted != null) {
       if (unquoted.isEmpty()) {
@@ -158,16 +195,37 @@ public class OracleColumnDefaultValueConverter extends JdbcColumnDefaultValueCon
       return DEFAULT_VALUE_OF_CURRENT_TIMESTAMP;
     }
 
-    // A sequence NEXTVAL, a TO_DATE call, or any other expression; keep the original text.
+    // A user sequence NEXTVAL, a virtual column expression, or anything else; keep the text.
     return UnparsedExpression.of(columnDefaultValue);
   }
 
   /**
-   * Escapes a value and wraps it as an Oracle string literal. Only the quote needs doubling; unlike
-   * MySQL, Oracle does not treat the backslash as an escape character.
+   * Returns the value inside the {@code TO_DATE} or {@code TO_TIMESTAMP} call {@link
+   * #fromGravitino} writes, or {@code null} if the default is neither.
+   *
+   * <p>The format mask is deliberately ignored. The argument goes to {@link #parseLiteral}, which
+   * parses it with the formatter matching the mask this class emits and dispatches on the column's
+   * own type, so a default written by another tool with a different mask fails to parse and is
+   * surfaced unparsed rather than being silently misread.
+   *
+   * @param value the trimmed default text as the dictionary reports it
+   * @return the literal argument with its quotes stripped, or {@code null}
    */
-  private static String quoteLiteral(String value) {
-    return "'" + value.replace("'", "''") + "'";
+  private static String temporalLiteralArgument(String value) {
+    Matcher dateMatcher = TO_DATE_CALL.matcher(value);
+    if (dateMatcher.matches()) {
+      return unescape(dateMatcher.group(1));
+    }
+    Matcher timestampMatcher = TO_TIMESTAMP_CALL.matcher(value);
+    if (timestampMatcher.matches()) {
+      return unescape(timestampMatcher.group(1));
+    }
+    return null;
+  }
+
+  /** Collapses the doubled quote an Oracle string literal uses to carry a quote of its own. */
+  private static String unescape(String value) {
+    return value.replace("''", "'");
   }
 
   private static String formatDate(Object value) {
@@ -205,11 +263,12 @@ public class OracleColumnDefaultValueConverter extends JdbcColumnDefaultValueCon
     if (value.length() < 2 || value.charAt(0) != '\'' || value.charAt(value.length() - 1) != '\'') {
       return null;
     }
-    return value.substring(1, value.length() - 1).replace("''", "'");
+    return unescape(value.substring(1, value.length() - 1));
   }
 
   private Expression parseLiteral(JdbcTypeConverter.JdbcTypeBean type, String value) {
-    switch (OracleTypeConverter.normalize(type.getTypeName())) {
+    String typeName = OracleTypeConverter.normalize(type.getTypeName());
+    switch (typeName) {
       case OracleTypeConverter.BINARY_FLOAT:
         return Literals.floatLiteral(Float.valueOf(value));
       case OracleTypeConverter.BINARY_DOUBLE:
@@ -223,28 +282,37 @@ public class OracleColumnDefaultValueConverter extends JdbcColumnDefaultValueCon
       case OracleTypeConverter.SMALLINT:
         return decimalLiteral(type, value);
       case OracleTypeConverter.DATE:
-        return Literals.timestampLiteral(parseDateValue(value));
+        return Literals.of(parseDateValue(value), TYPE_CONVERTER.toGravitino(type));
       case OracleTypeConverter.CHAR:
       case OracleTypeConverter.NCHAR:
       case OracleTypeConverter.CLOB:
       case OracleTypeConverter.NCLOB:
       case OracleTypeConverter.LONG:
-        return Literals.stringLiteral(value);
       case JdbcTypeConverter.VARCHAR:
       case OracleTypeConverter.VARCHAR2:
       case OracleTypeConverter.NVARCHAR2:
-        Integer columnSize = type.getColumnSize();
-        return columnSize == null || columnSize < 0
-            ? Literals.stringLiteral(value)
-            : Literals.varcharLiteral(columnSize, value);
+        return characterLiteral(type, value);
       default:
         // A timestamp family name carries an embedded precision, so it cannot be matched here.
-        if (OracleTypeConverter.normalize(type.getTypeName())
-            .startsWith(JdbcTypeConverter.TIMESTAMP)) {
-          return Literals.timestampLiteral(LocalDateTime.parse(value, DATE_TIME_FORMATTER));
+        if (typeName.startsWith(JdbcTypeConverter.TIMESTAMP)) {
+          return Literals.of(
+              LocalDateTime.parse(value, DATE_TIME_FORMATTER), TYPE_CONVERTER.toGravitino(type));
         }
         throw new IllegalArgumentException("Unknown data type for literal: " + type.getTypeName());
     }
+  }
+
+  /**
+   * Builds a character literal carrying the length {@link OracleTypeConverter} resolves for the
+   * column, so a default cannot disagree with the type of the column holding it. A driver that
+   * reports no usable size leaves the value unsized, which the length bearing types cannot express.
+   */
+  private static Expression characterLiteral(JdbcTypeConverter.JdbcTypeBean type, String value) {
+    Integer columnSize = type.getColumnSize();
+    if (columnSize == null || columnSize < 0) {
+      return Literals.stringLiteral(value);
+    }
+    return Literals.of(value, TYPE_CONVERTER.toGravitino(type));
   }
 
   /**

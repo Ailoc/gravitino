@@ -50,6 +50,40 @@ public class TestSqlServerTableOperationsSqlGeneration {
   private static final String QUALIFIED = "[dbo].[test_table]";
 
   /**
+   * The variables every default constraint fragment shares, which a batch declares once at its head
+   * because SQL Server rejects a second {@code DECLARE} of the same name.
+   */
+  private static final String CONSTRAINT_DECLARATIONS =
+      "DECLARE @gravitinoConstraintName NVARCHAR(256);\n"
+          + "DECLARE @gravitinoConstraintDefinition NVARCHAR(MAX);\n"
+          + "DECLARE @gravitinoDynamicSql NVARCHAR(MAX);\n";
+
+  /**
+   * Asserts that a batch looks the column default up and drops it before anything else, which is
+   * what lets an {@code ALTER COLUMN} or a {@code DROP COLUMN} on a defaulted column succeed.
+   */
+  private static void assertDropsDefaultConstraint(String sql, String column) {
+    Assertions.assertTrue(sql.startsWith(CONSTRAINT_DECLARATIONS), sql);
+    Assertions.assertTrue(sql.contains("SET @gravitinoConstraintName = NULL;"), sql);
+    Assertions.assertTrue(sql.contains("@gravitinoConstraintDefinition = dc.definition"), sql);
+    Assertions.assertTrue(sql.contains("FROM sys.default_constraints dc"), sql);
+    Assertions.assertTrue(
+        sql.contains("dc.parent_object_id = OBJECT_ID(N'" + QUALIFIED + "')"), sql);
+    Assertions.assertTrue(sql.contains("AND c.name = N'" + column + "'"), sql);
+    Assertions.assertTrue(sql.contains("QUOTENAME(@gravitinoConstraintName)"), sql);
+    Assertions.assertTrue(sql.contains("IF @gravitinoConstraintName IS NOT NULL"), sql);
+    Assertions.assertTrue(sql.contains("DROP CONSTRAINT"), sql);
+  }
+
+  private static int countOccurrences(String text, String token) {
+    int count = 0;
+    for (int i = text.indexOf(token); i >= 0; i = text.indexOf(token, i + token.length())) {
+      count++;
+    }
+    return count;
+  }
+
+  /**
    * SQL Server has no session level current schema, so every statement has to carry the schema.
    * This subclass supplies the converters the generators need and stubs out the lazy table load,
    * which would otherwise require a live connection.
@@ -466,7 +500,9 @@ public class TestSqlServerTableOperationsSqlGeneration {
         ops.generateAlterTableSql(
             SCHEMA, TABLE, TableChange.deleteColumn(new String[] {"col1"}, false));
 
-    Assertions.assertEquals("ALTER TABLE " + QUALIFIED + " DROP COLUMN [col1];", sql);
+    assertDropsDefaultConstraint(sql, "col1");
+    Assertions.assertTrue(sql.indexOf("DROP CONSTRAINT") < sql.indexOf("DROP COLUMN"), sql);
+    Assertions.assertTrue(sql.contains("ALTER TABLE " + QUALIFIED + " DROP COLUMN [col1];"), sql);
   }
 
   @Test
@@ -491,7 +527,11 @@ public class TestSqlServerTableOperationsSqlGeneration {
                 SCHEMA, TABLE, TableChange.deleteColumn(new String[] {"absent"}, false)));
   }
 
-  /** ALTER COLUMN replaces the whole definition, so the existing nullability has to be restated. */
+  /**
+   * ALTER COLUMN replaces the whole definition, so the existing nullability has to be restated, and
+   * the default constraint has to come off first because SQL Server refuses the statement while the
+   * column carries one. A type change does not put the default back, matching the MySQL catalog.
+   */
   @Test
   public void testAlterTableUpdateColumnTypeRestatesNullability() {
     ops.withLazyLoadTable(tableOf(notNullColumn("col1", Types.IntegerType.get())));
@@ -502,19 +542,50 @@ public class TestSqlServerTableOperationsSqlGeneration {
             TABLE,
             TableChange.updateColumnType(new String[] {"col1"}, Types.LongType.get()));
 
-    Assertions.assertEquals(
-        "ALTER TABLE " + QUALIFIED + " ALTER COLUMN [col1] bigint NOT NULL;", sql);
+    assertDropsDefaultConstraint(sql, "col1");
+    Assertions.assertTrue(sql.indexOf("DROP CONSTRAINT") < sql.indexOf("ALTER COLUMN"), sql);
+    Assertions.assertTrue(
+        sql.contains("ALTER TABLE " + QUALIFIED + " ALTER COLUMN [col1] bigint NOT NULL;"), sql);
+    Assertions.assertFalse(sql.contains("ADD DEFAULT"), sql);
   }
 
+  /** Only nullability changes here, so the default the fragment dropped goes back on afterwards. */
   @Test
-  public void testAlterTableUpdateColumnNullability() {
+  public void testAlterTableUpdateColumnNullabilityRestoresDefault() {
     ops.withLazyLoadTable(tableOf(notNullColumn("col1", Types.IntegerType.get())));
 
     String sql =
         ops.generateAlterTableSql(
             SCHEMA, TABLE, TableChange.updateColumnNullability(new String[] {"col1"}, true));
 
-    Assertions.assertEquals("ALTER TABLE " + QUALIFIED + " ALTER COLUMN [col1] int NULL;", sql);
+    assertDropsDefaultConstraint(sql, "col1");
+    Assertions.assertTrue(
+        sql.contains("ALTER TABLE " + QUALIFIED + " ALTER COLUMN [col1] int NULL;"), sql);
+    Assertions.assertTrue(sql.contains("' + @gravitinoConstraintDefinition + N' FOR [col1]'"), sql);
+    Assertions.assertTrue(sql.indexOf("ALTER COLUMN") < sql.indexOf("ADD DEFAULT"), sql);
+  }
+
+  /**
+   * SQL Server rejects a second {@code DECLARE} of the same name in one batch, so the variables are
+   * declared once however many changes touch a column default. Each fragment still clears them
+   * first, because a lookup that matches no row leaves the previous value in place.
+   */
+  @Test
+  public void testAlterTableDeclaresConstraintVariablesOnce() {
+    ops.withLazyLoadTable(
+        tableOf(column("col1", Types.IntegerType.get()), column("col2", Types.IntegerType.get())));
+
+    String sql =
+        ops.generateAlterTableSql(
+            SCHEMA,
+            TABLE,
+            TableChange.updateColumnType(new String[] {"col1"}, Types.LongType.get()),
+            TableChange.deleteColumn(new String[] {"col2"}, false));
+
+    Assertions.assertEquals(1, countOccurrences(sql, "DECLARE @gravitinoConstraintName"), sql);
+    Assertions.assertEquals(2, countOccurrences(sql, "SET @gravitinoConstraintName = NULL;"), sql);
+    Assertions.assertTrue(sql.contains("AND c.name = N'col1'"), sql);
+    Assertions.assertTrue(sql.contains("AND c.name = N'col2'"), sql);
   }
 
   @Test
@@ -569,15 +640,26 @@ public class TestSqlServerTableOperationsSqlGeneration {
             TableChange.updateColumnDefaultValue(
                 new String[] {"col1"}, Literals.integerLiteral(42)));
 
-    Assertions.assertTrue(sql.contains("DECLARE @gravitinoDefaultConstraint NVARCHAR(256);"), sql);
-    Assertions.assertTrue(sql.contains("FROM sys.default_constraints dc"), sql);
-    Assertions.assertTrue(
-        sql.contains("dc.parent_object_id = OBJECT_ID(N'" + QUALIFIED + "')"), sql);
-    Assertions.assertTrue(sql.contains("AND c.name = N'col1'"), sql);
-    Assertions.assertTrue(sql.contains("IF @gravitinoDefaultConstraint IS NOT NULL"), sql);
-    Assertions.assertTrue(sql.contains("DROP CONSTRAINT"), sql);
+    assertDropsDefaultConstraint(sql, "col1");
     Assertions.assertTrue(
         sql.contains("ALTER TABLE " + QUALIFIED + " ADD DEFAULT 42 FOR [col1];"), sql);
+    Assertions.assertFalse(sql.contains("@gravitinoConstraintDefinition + N' FOR"), sql);
+  }
+
+  /** Unsetting a default is the drop on its own, with nothing attached afterwards. */
+  @Test
+  public void testAlterTableUpdateColumnDefaultValueToNoneOnlyDrops() {
+    ops.withLazyLoadTable(tableOf(column("col1", Types.IntegerType.get())));
+
+    String sql =
+        ops.generateAlterTableSql(
+            SCHEMA,
+            TABLE,
+            TableChange.updateColumnDefaultValue(
+                new String[] {"col1"}, Column.DEFAULT_VALUE_NOT_SET));
+
+    assertDropsDefaultConstraint(sql, "col1");
+    Assertions.assertFalse(sql.contains("ADD DEFAULT"), sql);
   }
 
   @Test

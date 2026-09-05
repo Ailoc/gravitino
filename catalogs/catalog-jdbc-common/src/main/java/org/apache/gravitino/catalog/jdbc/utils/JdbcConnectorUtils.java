@@ -32,15 +32,32 @@ public final class JdbcConnectorUtils {
   /**
    * Execute a SQL update statement against the given datasource.
    *
+   * <p>The statement may be a batch of several statements separated by newlines, which is how the
+   * catalogs emit an {@code ALTER TABLE} carrying more than one change. Every result the batch
+   * produces is consumed before returning: {@link Statement#executeUpdate} inspects only the first
+   * one, so a driver would report success for a batch whose second statement failed and whose
+   * remaining statements the server then skipped.
+   *
+   * <p>The walk is the loop the JDBC specification documents for {@link Statement#execute}, and it
+   * ends when {@link Statement#getUpdateCount} reports {@code -1}. A {@code Statement} standing in
+   * for a driver has to report that, or the loop does not end.
+   *
    * @param connection The connection to attempt to execute an update against
    * @param sql The sql to execute
-   * @return The number of rows updated or exception
+   * @return The number of rows updated by the first statement, or -1 if it returned a result set
    * @throws SQLException on error during execution of the update to the underlying SQL data store
    */
   public static int executeUpdate(final Connection connection, final String sql)
       throws SQLException {
     try (final Statement statement = connection.createStatement()) {
-      return statement.executeUpdate(sql);
+      boolean hasResultSet = statement.execute(sql);
+      int updateCount = hasResultSet ? -1 : statement.getUpdateCount();
+      int firstUpdateCount = updateCount;
+      while (hasResultSet || updateCount != -1) {
+        hasResultSet = statement.getMoreResults();
+        updateCount = statement.getUpdateCount();
+      }
+      return firstUpdateCount;
     }
   }
 

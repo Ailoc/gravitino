@@ -433,6 +433,44 @@ public abstract class JdbcTableOperations implements TableOperation {
     // nothing to do
   }
 
+  /**
+   * Replaces the columns a table builder holds with copies carrying comments read from the
+   * catalog's own dictionary.
+   *
+   * <p>Meant for {@link #correctJdbcTableFields} in dialects whose driver does not report {@code
+   * REMARKS}: Oracle fills it only when its {@code remarksReporting} connection property is on, and
+   * SQL Server stores descriptions as extended properties that mssql-jdbc never surfaces. Both read
+   * the text back themselves and hand it here, so the column copying lives in one place.
+   *
+   * @param jdbcTableBuilder the builder holding the table as the driver reported it
+   * @param comments the comments keyed by column name, omitting the columns that have none
+   */
+  protected static void applyColumnComments(
+      JdbcTable.Builder jdbcTableBuilder, Map<String, String> comments) {
+    if (comments.isEmpty()) {
+      return;
+    }
+    Column[] columns = jdbcTableBuilder.columns();
+    Column[] corrected = new Column[columns.length];
+    for (int i = 0; i < columns.length; i++) {
+      JdbcColumn column = (JdbcColumn) columns[i];
+      String comment = comments.get(column.name());
+      corrected[i] = comment == null ? column : withComment(column, comment);
+    }
+    jdbcTableBuilder.withColumns(corrected);
+  }
+
+  private static JdbcColumn withComment(JdbcColumn column, String comment) {
+    return JdbcColumn.builder()
+        .withName(column.name())
+        .withType(column.dataType())
+        .withComment(comment)
+        .withNullable(column.nullable())
+        .withDefaultValue(column.defaultValue())
+        .withAutoIncrement(column.autoIncrement())
+        .build();
+  }
+
   protected List<Index> getIndexes(Connection connection, String databaseName, String tableName)
       throws SQLException {
     DatabaseMetaData metaData = connection.getMetaData();
@@ -456,6 +494,11 @@ public abstract class JdbcTableOperations implements TableOperation {
     // Get unique key information
     ResultSet indexInfo = getIndexInfo(databaseName, tableName, metaData);
     while (indexInfo.next()) {
+      // getIndexInfo leads with a statistics pseudo-row describing the table itself rather than an
+      // index. It carries no index name, so collecting it would produce a null-named unique key.
+      if (indexInfo.getShort("TYPE") == DatabaseMetaData.tableIndexStatistic) {
+        continue;
+      }
       String indexName = indexInfo.getString("INDEX_NAME");
       String loadedTableName = indexInfo.getString("TABLE_NAME");
       // The primary key is also the unique key, so we need to filter the primary key here.

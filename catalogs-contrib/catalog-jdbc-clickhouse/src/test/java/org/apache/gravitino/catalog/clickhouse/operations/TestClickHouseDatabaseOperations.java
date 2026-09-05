@@ -190,7 +190,10 @@ public class TestClickHouseDatabaseOperations {
 
     Mockito.when(dataSource.getConnection()).thenReturn(connection);
     Mockito.when(connection.createStatement()).thenReturn(statement);
-    Mockito.when(statement.executeUpdate(Mockito.anyString())).thenReturn(0);
+    Mockito.when(statement.execute(Mockito.anyString())).thenReturn(false);
+    // A real statement reports -1 once the batch is exhausted; the mock's default of 0 would leave
+    // the walk in JdbcConnectorUtils.executeUpdate spinning.
+    Mockito.when(statement.getUpdateCount()).thenReturn(-1);
 
     ClickHouseDatabaseOperations ops = new ClickHouseDatabaseOperations();
     ops.initialize(dataSource, new JdbcExceptionConverter(), new HashMap<>());
@@ -198,7 +201,7 @@ public class TestClickHouseDatabaseOperations {
     ops.create("new_db", null, Collections.emptyMap());
 
     Mockito.verify(connection).setCatalog("information_schema");
-    Mockito.verify(statement).executeUpdate("CREATE DATABASE `new_db`");
+    Mockito.verify(statement).execute("CREATE DATABASE `new_db`");
   }
 
   // ---------------------------------------------------------------------------

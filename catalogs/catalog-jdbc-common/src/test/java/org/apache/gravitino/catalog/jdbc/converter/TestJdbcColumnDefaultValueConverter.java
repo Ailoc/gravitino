@@ -20,9 +20,11 @@ package org.apache.gravitino.catalog.jdbc.converter;
 
 import static org.apache.gravitino.rel.Column.DEFAULT_VALUE_NOT_SET;
 
+import java.time.LocalDateTime;
 import org.apache.gravitino.rel.Column;
 import org.apache.gravitino.rel.expressions.Expression;
 import org.apache.gravitino.rel.expressions.literals.Literals;
+import org.apache.gravitino.rel.types.Types;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -57,5 +59,47 @@ public class TestJdbcColumnDefaultValueConverter {
     expression = Literals.integerLiteral(1234);
     result = converter.fromGravitino(expression);
     Assertions.assertEquals("1234", result);
+  }
+
+  /**
+   * A default value reaches Gravitino through the REST API, so its text is untrusted. A quote has
+   * to be doubled, or it closes the literal early and leaves the remainder to be parsed as SQL.
+   */
+  @Test
+  public void testFromGravitinoEscapesQuoteInStringLiteral() {
+    Assertions.assertEquals(
+        "'owner''s value; DROP TABLE marker; --'",
+        converter.fromGravitino(Literals.stringLiteral("owner's value; DROP TABLE marker; --")));
+  }
+
+  /**
+   * None of the dialects this base converter serves treats the backslash as an escape character
+   * inside a string literal, so doubling it here would corrupt every Windows path stored as a
+   * default.
+   */
+  @Test
+  public void testFromGravitinoKeepsBackslashVerbatim() {
+    Assertions.assertEquals(
+        "'C:\\data\\notes'", converter.fromGravitino(Literals.stringLiteral("C:\\data\\notes")));
+  }
+
+  /** The blank numeric path shares the helper, so it escapes through the same code. */
+  @Test
+  public void testFromGravitinoQuotesBlankNumericLiteral() {
+    Assertions.assertEquals(
+        "''", converter.fromGravitino(Literals.of("", Types.IntegerType.get())));
+  }
+
+  /** A timestamp literal is rendered with a space where {@code LocalDateTime} puts a T. */
+  @Test
+  public void testFromGravitinoRendersTimestampLiteral() {
+    Assertions.assertEquals(
+        "'2020-01-01 12:30:15'",
+        converter.fromGravitino(
+            Literals.timestampLiteral(LocalDateTime.of(2020, 1, 1, 12, 30, 15))));
+    // The rendering comes from LocalDateTime#toString, which drops a zero seconds field.
+    Assertions.assertEquals(
+        "'2020-01-01 12:30'",
+        converter.fromGravitino(Literals.timestampLiteral(LocalDateTime.of(2020, 1, 1, 12, 30))));
   }
 }

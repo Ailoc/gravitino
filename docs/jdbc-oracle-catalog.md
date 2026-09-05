@@ -76,7 +76,9 @@ Creating a schema issues `CREATE USER "<schema>" NO AUTHENTICATION`, which creat
 Oracle commits implicitly around each DDL statement, so a failure between the two statements can leave a schema that exists without a tablespace quota. Grant the quota manually if that happens.
 :::
 
-The following schemas are filtered out of `listSchemas` and rejected as reserved names when creating a schema: the Oracle administrative accounts such as `sys`, `system`, `xdb`, `mdsys`, `ctxsys`, `sysman`, `audsys` and `dbsfwuser`, the versioned Application Express schemas matching `apex_` followed by six digits, and the fixed database roles.
+`listSchemas` returns the schemas `ALL_USERS` marks with `ORACLE_MAINTAINED = 'N'`, which is the distinction Oracle itself keeps between a schema a user owns and one Oracle owns. That covers the administrative accounts such as `sys`, `system`, `xdb`, `mdsys`, `ctxsys`, `sysman`, `audsys` and `dbsfwuser`, the versioned Application Express schemas matching `apex_` followed by six digits, and any internal account a later release adds.
+
+Oracle leaves a few of its own accounts unmarked, so a fixed set of reserved names is removed from the result as well. `PDBADMIN`, which creating a pluggable database leaves behind, reports `ORACLE_MAINTAINED = 'N'` on Oracle Database Free release 23.26, and no other `ALL_USERS` column separates it from a schema a user owns. The same set rejects a reserved name when a schema is created or renamed, where a name missing from it costs nothing because Oracle rejects a `CREATE USER` colliding with an existing account anyway.
 
 ### Schema Properties
 

@@ -41,7 +41,7 @@ Besides the [common catalog properties](./gravitino-server-config.md#catalog-pro
 
 | Configuration item      | Description                                                                                                                                                       | Default value | Required |
 |-------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------|----------|
-| `jdbc-url`              | JDBC URL for connecting to the database. You need to specify the database in the URL. For example `jdbc:sqlserver://localhost:1433;databaseName=your_database`.   | (none)        | Yes      |
+| `jdbc-url`              | JDBC URL for connecting to the database. You need to specify the database in the URL. For example `jdbc:sqlserver://localhost:1433;databaseName=your_database;encrypt=false`. | (none)        | Yes      |
 | `jdbc-driver`           | The driver of the JDBC connection. For example `com.microsoft.sqlserver.jdbc.SQLServerDriver`.                                                                     | (none)        | Yes      |
 | `jdbc-database`         | The database of the JDBC connection. Configure it with the same value as the database in the `jdbc-url`. For example `your_database`.                              | (none)        | Yes      |
 | `jdbc-user`             | The JDBC user name.                                                                                                                                               | (none)        | Yes      |
@@ -53,6 +53,9 @@ Besides the [common catalog properties](./gravitino-server-config.md#catalog-pro
 :::caution
 Download the Microsoft JDBC driver to the `catalogs/jdbc-sqlserver/libs` directory. The driver is not distributed with Gravitino.
 Explicitly specify the database in both `jdbc-url` and `jdbc-database`. `jdbc-database` is mandatory: SQL Server qualifies every statement with the database name, and the catalog fails to initialize without it.
+:::
+:::caution
+mssql-jdbc 10.2 and later default to `encrypt=true`, so a server presenting a self-signed certificate fails the connection with `PKIX path building failed`. Add `trustServerCertificate=true` to the `jdbc-url` to keep the link encrypted while accepting that certificate, which is what a development or containerized SQL Server needs. `encrypt=false` sends the traffic unencrypted and is only appropriate on a network you already trust.
 :::
 :::info
 In SQL Server, the database corresponds to the Gravitino catalog, and the schema corresponds to the Gravitino schema. A SQL Server instance holds several databases, but one Gravitino catalog maps to exactly one of them.
@@ -220,5 +223,6 @@ You can't submit the `RenameTable` operation at the same time as other operation
 :::caution
 SQL Server doesn't support the `UpdateColumnPosition` operation, so you can only use `ColumnPosition.defaultPosition()` when `AddColumn`.
 `ALTER COLUMN` replaces the whole column definition, so changing a column type, its nullability or its default value restates the attributes this catalog knows about. If you update a nullable column to non-nullable, existing `NULL` rows make the statement fail.
+SQL Server binds a column default through a named constraint object and refuses to rewrite or delete a column that still carries one, so `UpdateColumnType`, `UpdateColumnNullability`, `UpdateColumnDefaultValue` and `DeleteColumn` drop that constraint first. `UpdateColumnNullability` attaches it again afterwards; `UpdateColumnType` leaves the column without a default, because the previous expression was written against the previous type.
 SQL Server has no recycle bin, so dropping a table cannot be undone.
 :::

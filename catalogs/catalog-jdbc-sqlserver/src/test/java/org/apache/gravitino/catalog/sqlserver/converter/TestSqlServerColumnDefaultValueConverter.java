@@ -29,6 +29,7 @@ import org.apache.gravitino.rel.expressions.Expression;
 import org.apache.gravitino.rel.expressions.UnparsedExpression;
 import org.apache.gravitino.rel.expressions.literals.Literals;
 import org.apache.gravitino.rel.types.Decimal;
+import org.apache.gravitino.rel.types.Types;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -52,6 +53,13 @@ public class TestSqlServerColumnDefaultValueConverter {
     JdbcTypeConverter.JdbcTypeBean typeBean = type(typeName);
     typeBean.setColumnSize(size);
     typeBean.setScale(scale);
+    return typeBean;
+  }
+
+  /** Carries the fractional seconds precision the driver reports for {@code time} and friends. */
+  private static JdbcTypeConverter.JdbcTypeBean precision(String typeName, int datetimePrecision) {
+    JdbcTypeConverter.JdbcTypeBean typeBean = type(typeName);
+    typeBean.setDatetimePrecision(datetimePrecision);
     return typeBean;
   }
 
@@ -95,6 +103,24 @@ public class TestSqlServerColumnDefaultValueConverter {
     // Scientific notation survives as well.
     Assertions.assertEquals(
         Literals.doubleLiteral(1.0E10d), convert(type("float"), "((1.0E+10))", false));
+  }
+
+  /**
+   * SQL Server persists a whole number default with a dangling decimal point: {@code DEFAULT
+   * 100000000000} on a {@code bigint} column is stored as {@code ((100000000000.))}, which the
+   * integral parsers reject outright.
+   */
+  @Test
+  public void testWholeNumberDefaultWithTrailingDecimalPoint() {
+    Assertions.assertEquals(
+        Literals.longLiteral(100000000000L), convert(type("bigint"), "((100000000000.))", false));
+    Assertions.assertEquals(Literals.integerLiteral(10), convert(type("int"), "((10.))", false));
+    Assertions.assertEquals(
+        Literals.shortLiteral((short) 7), convert(type("smallint"), "((7.))", false));
+    // Only a whole number carries one, so a fractional default is left as it is.
+    Assertions.assertEquals(
+        Literals.decimalLiteral(Decimal.of("1.5", 10, 1)),
+        convert(decimal("decimal", 10, 1), "((1.5))", false));
   }
 
   /**
@@ -144,12 +170,37 @@ public class TestSqlServerColumnDefaultValueConverter {
     Assertions.assertEquals(
         Literals.varcharLiteral(10, "abc"), convert(sized("varchar", 10), "('abc')", false));
     Assertions.assertEquals(
-        Literals.stringLiteral("abc"), convert(sized("nchar", 10), "(N'abc')", false));
+        Literals.of("abc", Types.FixedCharType.of(10)),
+        convert(sized("nchar", 10), "(N'abc')", false));
     // A doubled quote inside the literal is an escaped quote, not the end of it.
     Assertions.assertEquals(
         Literals.varcharLiteral(10, "it's"), convert(sized("varchar", 10), "('it''s')", false));
     Assertions.assertEquals(
         Literals.varcharLiteral(10, ""), convert(sized("varchar", 10), "('')", false));
+  }
+
+  /**
+   * A default has to carry the type of the column holding it, or it disagrees with the column the
+   * moment both are read back. The blank padded types become fixed-char literals and the {@code
+   * max} length types become plain strings, exactly as the columns themselves are mapped.
+   */
+  @Test
+  public void testCharacterDefaultCarriesColumnType() {
+    Assertions.assertEquals(
+        Literals.of("abc", Types.FixedCharType.of(10)),
+        convert(sized("char", 10), "('abc')", false));
+    Assertions.assertEquals(
+        Literals.varcharLiteral(255, "abc"), convert(sized("nvarchar", 255), "(N'abc')", false));
+    // The driver spells varchar(max) as -1 on some paths and as Integer.MAX_VALUE on others.
+    Assertions.assertEquals(
+        Literals.stringLiteral("abc"), convert(sized("varchar", -1), "('abc')", false));
+    Assertions.assertEquals(
+        Literals.stringLiteral("abc"),
+        convert(sized("nvarchar", Integer.MAX_VALUE), "(N'abc')", false));
+    // A column the type converter resolves to a string cannot carry a sized literal either.
+    Assertions.assertEquals(Literals.stringLiteral("abc"), convert(type("text"), "('abc')", false));
+    Assertions.assertEquals(
+        Literals.stringLiteral("abc"), convert(type("ntext"), "(N'abc')", false));
   }
 
   @Test
@@ -170,6 +221,30 @@ public class TestSqlServerColumnDefaultValueConverter {
     Assertions.assertEquals(
         Literals.timestampLiteral(LocalDateTime.of(2020, 1, 1, 12, 30, 0)),
         convert(type("datetime2"), "('2020-01-01 12:30:00')", false));
+  }
+
+  /**
+   * A temporal default has to carry the precision of the column holding it, so a {@code time(3)}
+   * column does not read its default back as a precision-less {@code time} and disagree with its
+   * own type.
+   */
+  @Test
+  public void testTemporalDefaultCarriesColumnPrecision() {
+    Assertions.assertEquals(
+        Literals.of(LocalTime.of(12, 30, 0), Types.TimeType.of(3)),
+        convert(precision("time", 3), "('12:30:00')", false));
+    Assertions.assertEquals(
+        Literals.of(
+            LocalDateTime.of(2020, 1, 1, 12, 30, 0), Types.TimestampType.withoutTimeZone(3)),
+        convert(precision("datetime2", 3), "('2020-01-01 12:30:00')", false));
+    Assertions.assertEquals(
+        Literals.of(LocalDateTime.of(2020, 1, 1, 12, 30, 0), Types.TimestampType.withTimeZone(7)),
+        convert(precision("datetimeoffset", 7), "('2020-01-01 12:30:00')", false));
+    // datetime has a fixed ~3.33ms resolution, which calculateDatetimePrecision reports as 3.
+    Assertions.assertEquals(
+        Literals.of(
+            LocalDateTime.of(2020, 1, 1, 12, 30, 0), Types.TimestampType.withoutTimeZone(3)),
+        convert(precision("datetime", 3), "('2020-01-01 12:30:00')", false));
   }
 
   /**

@@ -76,7 +76,7 @@ public class JdbcColumnDefaultValueConverter {
         // in some cases like `alter table t modify column `id` int null default '';`, in such
         // case value is an empty string, we should wrap it with single quotes to avoid SQL error.
         if (StringUtils.isBlank(value)) {
-          value = "'%s'".formatted(value);
+          value = quoteLiteral(value);
         }
         return value;
       } else if (type instanceof Types.TimestampType) {
@@ -84,15 +84,30 @@ public class JdbcColumnDefaultValueConverter {
          * @see LocalDateTime#toString() would return like 'yyyy-MM-ddTHH:mm:ss'
          */
         if (literal.value() instanceof String || literal.value() instanceof LocalDateTime) {
-          return String.format("'%s'", literal.value().toString().replace("T", " "));
+          return quoteLiteral(literal.value().toString().replace("T", " "));
         }
-        return String.format("'%s'", literal.value());
+        return quoteLiteral(literal.value());
       } else {
-        return String.format("'%s'", literal.value());
+        return quoteLiteral(literal.value());
       }
     }
 
     throw new IllegalArgumentException("Not a supported column default value: " + defaultValue);
+  }
+
+  /**
+   * Wraps a value as a SQL string literal, doubling any single quote it contains.
+   *
+   * <p>A default value reaches Gravitino through the REST API, so its text is untrusted. Without
+   * the escaping, a value holding a quote would close the literal early and leave the remainder to
+   * be parsed as SQL. Doubling the quote is the standard SQL escape and is honoured by MySQL,
+   * PostgreSQL and their derivatives as well as by SQL Server and Oracle.
+   *
+   * @param value the value to render as a literal
+   * @return the quoted literal
+   */
+  protected static String quoteLiteral(Object value) {
+    return "'" + String.valueOf(value).replace("'", "''") + "'";
   }
 
   public Expression toGravitino(

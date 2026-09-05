@@ -90,7 +90,7 @@ public class SqlServerColumnDefaultValueConverter extends JdbcColumnDefaultValue
     }
 
     if (NUMERIC_LITERAL.matcher(value).matches()) {
-      return parseOrUnparsed(type, value, columnDefaultValue);
+      return parseOrUnparsed(type, stripTrailingDecimalPoint(value), columnDefaultValue);
     }
 
     if (CURRENT_TIME_FUNCTIONS.contains(normalizeFunctionName(value))) {
@@ -128,6 +128,17 @@ public class SqlServerColumnDefaultValueConverter extends JdbcColumnDefaultValue
       result = result.substring(1, result.length() - 1).trim();
     }
     return result;
+  }
+
+  /**
+   * Removes the decimal point SQL Server leaves on a whole number default.
+   *
+   * <p>{@code DEFAULT 100000000000} on a {@code bigint} column is persisted as {@code
+   * ((100000000000.))}, and {@link Long#valueOf} rejects the dangling point. Only a whole number
+   * can carry one, so dropping it cannot change the value.
+   */
+  private static String stripTrailingDecimalPoint(String value) {
+    return value.endsWith(".") ? value.substring(0, value.length() - 1) : value;
   }
 
   /**
@@ -171,21 +182,21 @@ public class SqlServerColumnDefaultValueConverter extends JdbcColumnDefaultValue
       case JdbcTypeConverter.DATE:
         return Literals.dateLiteral(LocalDate.parse(value, DATE_FORMATTER));
       case JdbcTypeConverter.TIME:
-        return Literals.timeLiteral(LocalTime.parse(value, TIME_FORMATTER));
+        return Literals.of(
+            LocalTime.parse(value, TIME_FORMATTER), TYPE_CONVERTER.toGravitino(type));
       case SqlServerTypeConverter.DATETIME:
       case SqlServerTypeConverter.SMALLDATETIME:
       case SqlServerTypeConverter.DATETIME2:
       case SqlServerTypeConverter.DATETIMEOFFSET:
-        return Literals.timestampLiteral(LocalDateTime.parse(value, DATE_TIME_FORMATTER));
+        return Literals.of(
+            LocalDateTime.parse(value, DATE_TIME_FORMATTER), TYPE_CONVERTER.toGravitino(type));
       case SqlServerTypeConverter.CHAR:
       case SqlServerTypeConverter.NCHAR:
-        return Literals.stringLiteral(value);
       case JdbcTypeConverter.VARCHAR:
       case SqlServerTypeConverter.NVARCHAR:
-        Integer columnSize = type.getColumnSize();
-        return columnSize == null || columnSize < 0
-            ? Literals.stringLiteral(value)
-            : Literals.varcharLiteral(columnSize, value);
+        // The converter is what resolved the column's own type, so a default on a varchar(max)
+        // column reads back as a string and one on a varchar(20) column as a varchar of length 20.
+        return Literals.of(value, TYPE_CONVERTER.toGravitino(type));
       case JdbcTypeConverter.TEXT:
       case SqlServerTypeConverter.NTEXT:
         return Literals.stringLiteral(value);

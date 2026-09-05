@@ -29,6 +29,7 @@ import org.apache.gravitino.rel.expressions.Expression;
 import org.apache.gravitino.rel.expressions.UnparsedExpression;
 import org.apache.gravitino.rel.expressions.literals.Literals;
 import org.apache.gravitino.rel.types.Decimal;
+import org.apache.gravitino.rel.types.Types;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -55,6 +56,17 @@ public class TestOracleColumnDefaultValueConverter {
     JdbcTypeConverter.JdbcTypeBean typeBean = type(typeName);
     typeBean.setColumnSize(size);
     typeBean.setScale(scale);
+    return typeBean;
+  }
+
+  /**
+   * Carries the fractional seconds precision the table operations resolve before the default value
+   * converter sees the bean. Oracle reports it inside the type name, which {@link
+   * OracleTypeConverter} does not parse back out of it.
+   */
+  private static JdbcTypeConverter.JdbcTypeBean timestamp(String typeName, int precision) {
+    JdbcTypeConverter.JdbcTypeBean typeBean = type(typeName);
+    typeBean.setDatetimePrecision(precision);
     return typeBean;
   }
 
@@ -158,41 +170,61 @@ public class TestOracleColumnDefaultValueConverter {
     // A doubled quote inside the literal is an escaped quote, not the end of it.
     Assertions.assertEquals(
         Literals.varcharLiteral(20, "it's"), convert(sized("varchar2", 20), "'it''s'", false));
-    // CHAR is blank padded, so it keeps the plain string rather than a sized varchar.
+    // CHAR is blank padded, and its default carries the length of the column holding it.
     Assertions.assertEquals(
-        Literals.stringLiteral("abc"), convert(sized("char", 10), "'abc'", false));
+        Literals.of("abc", Types.FixedCharType.of(10)), convert(sized("char", 10), "'abc'", false));
+    Assertions.assertEquals(
+        Literals.of("abc", Types.FixedCharType.of(10)),
+        convert(sized("nchar", 10), "'abc'", false));
+    // The large object types are unsized in Gravitino, whatever the driver reports as their size.
     Assertions.assertEquals(Literals.stringLiteral("abc"), convert(type("clob"), "'abc'", false));
+    Assertions.assertEquals(
+        Literals.stringLiteral("abc"), convert(sized("clob", 4000), "'abc'", false));
+    Assertions.assertEquals(
+        Literals.stringLiteral("abc"), convert(sized("long", -1), "'abc'", false));
     // Without a reported size there is nothing to build a sized literal from.
     Assertions.assertEquals(
         Literals.stringLiteral("abc"), convert(type("varchar2"), "'abc'", false));
+    Assertions.assertEquals(
+        Literals.stringLiteral("abc"), convert(sized("char", -1), "'abc'", false));
   }
 
   /**
    * Oracle {@code DATE} carries a time of day, so its default is a timestamp literal. Both the bare
-   * date and the date and time form are accepted, depending on how the default was written.
+   * date and the date and time form are accepted, depending on how the default was written. The
+   * literal carries the precision of the column holding it, zero for a {@code DATE} column, instead
+   * of leaving the precision unset.
    */
   @Test
   public void testDateDefaults() {
     Assertions.assertEquals(
-        Literals.timestampLiteral(LocalDateTime.of(2020, 1, 1, 0, 0)),
+        Literals.of(LocalDateTime.of(2020, 1, 1, 0, 0), Types.TimestampType.withoutTimeZone(0)),
         convert(type("date"), "'2020-01-01'", false));
     Assertions.assertEquals(
-        Literals.timestampLiteral(LocalDateTime.of(2020, 1, 1, 12, 30, 0)),
+        Literals.of(
+            LocalDateTime.of(2020, 1, 1, 12, 30, 0), Types.TimestampType.withoutTimeZone(0)),
         convert(type("date"), "'2020-01-01 12:30:00'", false));
   }
 
-  /** The driver embeds the fractional seconds precision in the timestamp type name. */
+  /**
+   * The driver embeds the fractional seconds precision in the timestamp type name, so the literal
+   * takes its precision from the column and a {@code WITH TIME ZONE} column keeps the offset
+   * marker.
+   */
   @Test
   public void testTimestampDefaults() {
     Assertions.assertEquals(
-        Literals.timestampLiteral(LocalDateTime.of(2020, 1, 1, 12, 30, 0)),
-        convert(type("timestamp(6)"), "'2020-01-01 12:30:00'", false));
+        Literals.of(
+            LocalDateTime.of(2020, 1, 1, 12, 30, 0), Types.TimestampType.withoutTimeZone(6)),
+        convert(timestamp("timestamp(6)", 6), "'2020-01-01 12:30:00'", false));
     Assertions.assertEquals(
-        Literals.timestampLiteral(LocalDateTime.of(2020, 1, 1, 12, 30, 0, 123000000)),
-        convert(type("timestamp(6)"), "'2020-01-01 12:30:00.123000'", false));
+        Literals.of(
+            LocalDateTime.of(2020, 1, 1, 12, 30, 0, 123000000),
+            Types.TimestampType.withoutTimeZone(6)),
+        convert(timestamp("timestamp(6)", 6), "'2020-01-01 12:30:00.123000'", false));
     Assertions.assertEquals(
-        Literals.timestampLiteral(LocalDateTime.of(2020, 1, 1, 12, 30, 0)),
-        convert(type("timestamp(3) with time zone"), "'2020-01-01 12:30:00'", false));
+        Literals.of(LocalDateTime.of(2020, 1, 1, 12, 30, 0), Types.TimestampType.withTimeZone(3)),
+        convert(timestamp("timestamp(3) with time zone", 3), "'2020-01-01 12:30:00'", false));
   }
 
   /**
@@ -224,14 +256,60 @@ public class TestOracleColumnDefaultValueConverter {
     Assertions.assertEquals(
         UnparsedExpression.of("\"SEQ_ORDERS\".NEXTVAL"),
         convert(type("number"), "\"SEQ_ORDERS\".NEXTVAL", false));
-    Assertions.assertEquals(
-        UnparsedExpression.of("TO_DATE('2020-01-01', 'YYYY-MM-DD')"),
-        convert(type("date"), "TO_DATE('2020-01-01', 'YYYY-MM-DD')", false));
     // SYS_EXTRACT_UTC returns UTC rather than local server time, so folding it into Gravitino's
     // CURRENT_TIMESTAMP would silently change the meaning of the default.
     Assertions.assertEquals(
         UnparsedExpression.of("SYS_EXTRACT_UTC(SYSTIMESTAMP)"),
         convert(type("timestamp(6)"), "SYS_EXTRACT_UTC(SYSTIMESTAMP)", false));
+  }
+
+  /**
+   * The dictionary reports the {@code TO_DATE} and {@code TO_TIMESTAMP} calls {@link
+   * OracleColumnDefaultValueConverter#fromGravitino} writes, so a temporal default has to survive
+   * the round trip rather than coming back unparsed. Oracle {@code DATE} carries a time of day, so
+   * what reads back is the timestamp the column really holds.
+   */
+  @Test
+  public void testTemporalConversionCallDefaults() {
+    Assertions.assertEquals(
+        Literals.of(
+            LocalDate.of(2020, 1, 1).atStartOfDay(), Types.TimestampType.withoutTimeZone(0)),
+        convert(type("date"), String.format("TO_DATE('2020-01-01', %s)", DATE_MASK), false));
+    Assertions.assertEquals(
+        Literals.of(
+            LocalDateTime.of(2020, 1, 1, 12, 30, 0, 123000000),
+            Types.TimestampType.withoutTimeZone(6)),
+        convert(
+            timestamp("timestamp(6)", 6),
+            String.format("TO_TIMESTAMP('2020-01-01 12:30:00.123', %s)", TIMESTAMP_MASK),
+            false));
+    // The dictionary reports a default in a LONG column, padded with trailing whitespace.
+    Assertions.assertEquals(
+        Literals.of(
+            LocalDateTime.of(2020, 1, 1, 12, 30, 0), Types.TimestampType.withoutTimeZone(6)),
+        convert(
+            timestamp("timestamp(6)", 6),
+            String.format("TO_TIMESTAMP('2020-01-01 12:30:00', %s)", TIMESTAMP_MASK) + "   ",
+            false));
+  }
+
+  /**
+   * An identity column's default is the {@code NEXTVAL} of a sequence Oracle names after the
+   * table's object id. The user never chose it and the name is not stable across a table rebuild,
+   * so it reads back as no default and the auto-increment flag carries the information instead.
+   */
+  @Test
+  public void testIdentitySequenceDefaultIsNotSet() {
+    Assertions.assertSame(
+        DEFAULT_VALUE_NOT_SET, convert(type("number"), "\"APP\".\"ISEQ$$_73189\".nextval", false));
+    Assertions.assertSame(
+        DEFAULT_VALUE_NOT_SET, convert(type("number"), "\"ISEQ$$_73189\".nextval", false));
+    Assertions.assertSame(
+        DEFAULT_VALUE_NOT_SET, convert(type("number"), "ISEQ$$_1.NEXTVAL", false));
+    // A sequence the user named is a deliberate default, so it stays visible.
+    Assertions.assertEquals(
+        UnparsedExpression.of("\"SEQ_ORDERS\".NEXTVAL"),
+        convert(type("number"), "\"SEQ_ORDERS\".NEXTVAL", false));
   }
 
   /** A value that cannot be parsed for the column type keeps its original text. */

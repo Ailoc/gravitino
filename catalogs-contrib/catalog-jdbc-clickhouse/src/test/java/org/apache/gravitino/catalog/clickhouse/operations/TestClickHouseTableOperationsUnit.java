@@ -458,7 +458,7 @@ public class TestClickHouseTableOperationsUnit {
 
     Mockito.verify(mocks.connection).setCatalog("db_name");
     Mockito.verify(mocks.updateStatement)
-        .executeUpdate("RENAME TABLE `old-table` TO `new table` ON CLUSTER `ck_cluster`");
+        .execute("RENAME TABLE `old-table` TO `new table` ON CLUSTER `ck_cluster`");
   }
 
   @Test
@@ -471,7 +471,7 @@ public class TestClickHouseTableOperationsUnit {
 
     ops.rename("db_name", "old_table", "new_table");
 
-    Mockito.verify(mocks.updateStatement).executeUpdate("RENAME TABLE `old_table` TO `new_table`");
+    Mockito.verify(mocks.updateStatement).execute("RENAME TABLE `old_table` TO `new_table`");
   }
 
   @Test
@@ -491,7 +491,7 @@ public class TestClickHouseTableOperationsUnit {
   void testRenameMapsSqlException() throws Exception {
     RenameMocks mocks = renameMocks("comment\n[Gravitino] ch.cluster=ck_cluster", "MergeTree");
     SQLException sqlException = new SQLException("rename failed");
-    Mockito.when(mocks.updateStatement.executeUpdate(Mockito.anyString())).thenThrow(sqlException);
+    Mockito.when(mocks.updateStatement.execute(Mockito.anyString())).thenThrow(sqlException);
     ExposedClickHouseTableOperations ops = newOps(mocks.dataSource);
 
     GravitinoRuntimeException exception =
@@ -867,6 +867,9 @@ public class TestClickHouseTableOperationsUnit {
                 : ENGINE.MERGETREE.getValue());
     Mockito.when(metadataResult.getString("engine_full")).thenReturn(engineFull);
     Mockito.when(connection.createStatement()).thenReturn(updateStatement);
+    // A real statement reports -1 once the batch is exhausted; the mock's default of 0 would leave
+    // the walk in JdbcConnectorUtils.executeUpdate spinning.
+    Mockito.when(updateStatement.getUpdateCount()).thenReturn(-1);
     return new RenameMocks(dataSource, connection, updateStatement);
   }
 

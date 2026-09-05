@@ -23,10 +23,12 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -86,6 +88,53 @@ public class SqlServerTableOperations extends JdbcTableOperations
   private static final String ALTER_TABLE = "ALTER TABLE ";
   private static final String NOT_SUPPORT_NESTED_COLUMN_MSG =
       "SQL Server does not support nested column names.";
+
+  /** Batch variable holding the server generated name of a column default constraint. */
+  private static final String CONSTRAINT_NAME_VARIABLE = "@gravitinoConstraintName";
+
+  /** Batch variable holding the definition of the column default constraint being replaced. */
+  private static final String CONSTRAINT_DEFINITION_VARIABLE = "@gravitinoConstraintDefinition";
+
+  /** Batch variable holding a statement assembled from the two variables above. */
+  private static final String DYNAMIC_SQL_VARIABLE = "@gravitinoDynamicSql";
+
+  /**
+   * Declares the variables every default constraint fragment uses.
+   *
+   * <p>A batch declares them once at its head, because SQL Server rejects a second {@code DECLARE}
+   * of the same name with error 134 and a single alter request routinely carries several changes
+   * that each touch a column default.
+   */
+  private static final String CONSTRAINT_VARIABLE_DECLARATIONS =
+      "DECLARE "
+          + CONSTRAINT_NAME_VARIABLE
+          + " NVARCHAR(256);"
+          + NEW_LINE
+          + "DECLARE "
+          + CONSTRAINT_DEFINITION_VARIABLE
+          + " NVARCHAR(MAX);"
+          + NEW_LINE
+          + "DECLARE "
+          + DYNAMIC_SQL_VARIABLE
+          + " NVARCHAR(MAX);"
+          + NEW_LINE;
+
+  /**
+   * Reads the {@code MS_Description} of a table and of every one of its columns that carries one.
+   *
+   * <p>A table level property has {@code minor_id} zero, which matches no row of {@code
+   * sys.columns}, so the left join yields exactly one row with a null column name for the table
+   * itself plus one row per commented column. {@code value} is a {@code sql_variant}, which the
+   * driver does not hand back as text on its own, so it is cast here.
+   */
+  private static final String SELECT_DESCRIPTIONS_SQL =
+      "SELECT c.name, CAST(p.value AS NVARCHAR(MAX)) FROM sys.extended_properties p"
+          + " INNER JOIN sys.objects o ON p.major_id = o.object_id"
+          + " INNER JOIN sys.schemas s ON o.schema_id = s.schema_id"
+          + " LEFT JOIN sys.columns c ON c.object_id = o.object_id AND c.column_id = p.minor_id"
+          + " WHERE p.class = 1 AND p.name = N'"
+          + DESCRIPTION_PROPERTY
+          + "' AND s.name = ? AND o.name = ?";
 
   private String database;
   private SqlServerSchemaOperations schemaOperations;
@@ -429,9 +478,25 @@ public class SqlServerTableOperations extends JdbcTableOperations
       return "";
     }
 
-    String result = String.join(NEW_LINE, alterSql);
+    StringBuilder batch = new StringBuilder();
+    if (touchesDefaultConstraint(alterSql)) {
+      batch.append(CONSTRAINT_VARIABLE_DECLARATIONS);
+    }
+    String result = batch.append(String.join(NEW_LINE, alterSql)).toString();
     LOG.info("Generated alter table:{}.{} sql: {}", schemaName, tableName, result);
     return result;
+  }
+
+  /**
+   * Reports whether a batch needs the default constraint variables declared.
+   *
+   * <p>Only {@link #dropDefaultConstraintSql} and {@link #restoreDefaultConstraintSql} write the
+   * variable name, so its presence identifies the fragments that need the declaration. A schema,
+   * table or column that happens to be named after the variable only adds a declaration the batch
+   * then leaves unused.
+   */
+  private static boolean touchesDefaultConstraint(List<String> alterSql) {
+    return alterSql.stream().anyMatch(sql -> sql.contains(CONSTRAINT_NAME_VARIABLE));
   }
 
   @Override
@@ -461,6 +526,53 @@ public class SqlServerTableOperations extends JdbcTableOperations
       return getBasicJdbcColumnInfo(columnsResult);
     }
     return null;
+  }
+
+  /**
+   * Fills in the table and column comments, which the driver does not report.
+   *
+   * <p>SQL Server keeps descriptions in extended properties, and mssql-jdbc leaves {@code REMARKS}
+   * null for tables and columns alike however the connection is configured, so the base
+   * implementation reads no comment back at all. That also loses the Gravitino entity id when a
+   * comment is later updated, since {@link #updateCommentDefinition} carries the id over from the
+   * comment it reads back.
+   *
+   * @param connection the connection, already switched to the database holding the table
+   * @param databaseName the schema the table belongs to
+   * @param tableName the table name
+   * @param jdbcTableBuilder the builder holding the table as the driver reported it
+   * @throws SQLException if the description query fails
+   */
+  @Override
+  protected void correctJdbcTableFields(
+      Connection connection,
+      String databaseName,
+      String tableName,
+      JdbcTable.Builder jdbcTableBuilder)
+      throws SQLException {
+    String tableComment = null;
+    Map<String, String> columnComments = new HashMap<>();
+    try (PreparedStatement statement = connection.prepareStatement(SELECT_DESCRIPTIONS_SQL)) {
+      statement.setString(1, databaseName);
+      statement.setString(2, tableName);
+      try (ResultSet resultSet = statement.executeQuery()) {
+        while (resultSet.next()) {
+          String description = resultSet.getString(2);
+          if (StringUtils.isEmpty(description)) {
+            continue;
+          }
+          String columnName = resultSet.getString(1);
+          if (columnName == null) {
+            tableComment = description;
+          } else {
+            columnComments.put(columnName, description);
+          }
+        }
+      }
+    }
+
+    jdbcTableBuilder.withComment(tableComment);
+    applyColumnComments(jdbcTableBuilder, columnComments);
   }
 
   @Override
@@ -495,6 +607,19 @@ public class SqlServerTableOperations extends JdbcTableOperations
   protected ResultSet getPrimaryKeys(String schema, String tableName, DatabaseMetaData metaData)
       throws SQLException {
     return metaData.getPrimaryKeys(metaData.getConnection().getCatalog(), schema, tableName);
+  }
+
+  /**
+   * Reads the auto-increment flag as the string the driver actually reports.
+   *
+   * <p>mssql-jdbc answers {@code IS_AUTOINCREMENT} with {@code YES}, and {@code
+   * ResultSet#getBoolean} on that text yields false, so the base implementation reports every
+   * identity column as not auto-incrementing. The MySQL, StarRocks and Doris catalogs override this
+   * for the same reason.
+   */
+  @Override
+  protected boolean getAutoIncrementInfo(ResultSet resultSet) throws SQLException {
+    return "YES".equalsIgnoreCase(resultSet.getString("IS_AUTOINCREMENT"));
   }
 
   /**
@@ -712,17 +837,124 @@ public class SqlServerTableOperations extends JdbcTableOperations
       }
       throw new IllegalArgumentException("Delete column does not exist: " + col);
     }
-    return ALTER_TABLE
-        + qualifiedTable(schemaName, table.name())
+    String qualified = qualifiedTable(schemaName, table.name());
+    return dropDefaultConstraintSql(qualified, col)
+        + ALTER_TABLE
+        + qualified
         + " DROP COLUMN "
         + quote(col)
         + ";";
   }
 
   /**
-   * SQL Server binds a default value through a named constraint, and the constraint name is
-   * generated by the server. The existing constraint therefore has to be looked up and dropped
-   * before a new one can be attached.
+   * Clears the constraint variables before a fragment reads them.
+   *
+   * <p>{@code SELECT @v = c FROM ...} leaves {@code @v} untouched when the query matches no row, so
+   * a fragment that follows one which did find a constraint would otherwise act on that constraint
+   * a second time.
+   */
+  private static String resetConstraintVariablesSql() {
+    return "SET "
+        + CONSTRAINT_NAME_VARIABLE
+        + " = NULL;"
+        + NEW_LINE
+        + "SET "
+        + CONSTRAINT_DEFINITION_VARIABLE
+        + " = NULL;"
+        + NEW_LINE;
+  }
+
+  /**
+   * Builds the statements that read the default constraint of a column and drop it, if the column
+   * has one.
+   *
+   * <p>SQL Server binds a column default through a named constraint object whose name the server
+   * generates, and refuses an {@code ALTER COLUMN} or a {@code DROP COLUMN} on a column that still
+   * carries one with error 5074 or 4922. Every change that rewrites or removes a column therefore
+   * has to take the constraint off first, and because the name is unknown until the batch runs it
+   * has to be looked up from {@code sys.default_constraints}.
+   *
+   * <p>The drop is assembled into a variable before it runs. {@code EXEC} accepts a string built
+   * from literals and variables joined by {@code +}, but not a function call, so inlining {@code
+   * QUOTENAME(...)} into the {@code EXEC} argument is a syntax error. {@link
+   * SqlServerSchemaOperations#generateDropDatabaseSql} builds its dynamic statement the same way.
+   *
+   * @param qualifiedTable the {@code [schema].[table]} reference, already quoted
+   * @param column the column name, not quoted
+   * @return the statements that drop the column default, terminated by a newline
+   */
+  private static String dropDefaultConstraintSql(String qualifiedTable, String column) {
+    return resetConstraintVariablesSql()
+        + "SELECT "
+        + CONSTRAINT_NAME_VARIABLE
+        + " = dc.name, "
+        + CONSTRAINT_DEFINITION_VARIABLE
+        + " = dc.definition"
+        + NEW_LINE
+        + "  FROM sys.default_constraints dc"
+        + NEW_LINE
+        + "  INNER JOIN sys.columns c ON dc.parent_object_id = c.object_id"
+        + " AND dc.parent_column_id = c.column_id"
+        + NEW_LINE
+        + String.format(
+            "  WHERE dc.parent_object_id = OBJECT_ID(N'%s') AND c.name = N'%s';",
+            escapeLiteral(qualifiedTable), escapeLiteral(column))
+        + NEW_LINE
+        + "SET "
+        + DYNAMIC_SQL_VARIABLE
+        + " = N'"
+        + escapeLiteral(ALTER_TABLE + qualifiedTable + " DROP CONSTRAINT ")
+        + "' + QUOTENAME("
+        + CONSTRAINT_NAME_VARIABLE
+        + ");"
+        + NEW_LINE
+        + "IF "
+        + CONSTRAINT_NAME_VARIABLE
+        + " IS NOT NULL"
+        + NEW_LINE
+        + "  EXEC ("
+        + DYNAMIC_SQL_VARIABLE
+        + ");"
+        + NEW_LINE;
+  }
+
+  /**
+   * Builds the statement that reattaches the default constraint a fragment dropped.
+   *
+   * <p>{@code sys.default_constraints.definition} holds the expression exactly as the server
+   * accepted it, so adding it back under a new server generated name restores the column. A change
+   * that replaces the default attaches the replacement instead and does not call this.
+   *
+   * @param qualifiedTable the {@code [schema].[table]} reference, already quoted
+   * @param column the column name, not quoted
+   * @return the statement that restores the column default, terminated by a newline
+   */
+  private static String restoreDefaultConstraintSql(String qualifiedTable, String column) {
+    return "SET "
+        + DYNAMIC_SQL_VARIABLE
+        + " = N'"
+        + escapeLiteral(ALTER_TABLE + qualifiedTable + " ADD DEFAULT ")
+        + "' + "
+        + CONSTRAINT_DEFINITION_VARIABLE
+        + " + N' FOR "
+        + escapeLiteral(quote(column))
+        + "';"
+        + NEW_LINE
+        + "IF "
+        + CONSTRAINT_NAME_VARIABLE
+        + " IS NOT NULL"
+        + NEW_LINE
+        + "  EXEC ("
+        + DYNAMIC_SQL_VARIABLE
+        + ");"
+        + NEW_LINE;
+  }
+
+  /**
+   * Replaces the default of a column, or removes it when the change carries no new value.
+   *
+   * <p>The existing constraint has to come off first whatever the outcome, so the fragment this
+   * returns starts with {@link #dropDefaultConstraintSql}.
    */
   private String updateColumnDefaultValueDefinition(
       String schemaName, JdbcTable jdbcTable, TableChange.UpdateColumnDefaultValue change) {
@@ -733,29 +965,22 @@ public class SqlServerTableOperations extends JdbcTableOperations
     requireColumn(jdbcTable, col);
 
     String qualified = qualifiedTable(schemaName, jdbcTable.name());
-    String objectFilter =
-        String.format(
-            "dc.parent_object_id = OBJECT_ID(N'%s') AND c.name = N'%s'",
-            escapeLiteral(qualified), escapeLiteral(col));
+    StringBuilder batch = new StringBuilder(dropDefaultConstraintSql(qualified, col));
 
-    return "DECLARE @gravitinoDefaultConstraint NVARCHAR(256);\n"
-        + "SELECT @gravitinoDefaultConstraint = dc.name FROM sys.default_constraints dc\n"
-        + "  INNER JOIN sys.columns c ON dc.parent_object_id = c.object_id"
-        + " AND dc.parent_column_id = c.column_id\n"
-        + "  WHERE "
-        + objectFilter
-        + ";\n"
-        + "IF @gravitinoDefaultConstraint IS NOT NULL\n"
-        + "  EXEC(N'"
-        + escapeLiteral(ALTER_TABLE + qualified + " DROP CONSTRAINT ")
-        + "' + QUOTENAME(@gravitinoDefaultConstraint));\n"
-        + ALTER_TABLE
-        + qualified
-        + " ADD DEFAULT "
-        + columnDefaultValueConverter.fromGravitino(change.getNewDefaultValue())
-        + " FOR "
-        + quote(col)
-        + ";";
+    String newDefault = columnDefaultValueConverter.fromGravitino(change.getNewDefaultValue());
+    if (newDefault == null) {
+      // The change unsets the default, so dropping the constraint is the whole operation.
+      return batch.toString();
+    }
+    return batch
+        .append(ALTER_TABLE)
+        .append(qualified)
+        .append(" ADD DEFAULT ")
+        .append(newDefault)
+        .append(" FOR ")
+        .append(quote(col))
+        .append(";")
+        .toString();
   }
 
   private String updateColumnTypeDefinition(
@@ -766,16 +991,16 @@ public class SqlServerTableOperations extends JdbcTableOperations
     String col = change.fieldName()[0];
     JdbcColumn column = requireColumn(jdbcTable, col);
 
-    // ALTER COLUMN replaces the whole column definition, so nullability must be restated.
-    return ALTER_TABLE
-        + qualifiedTable(schemaName, jdbcTable.name())
-        + " ALTER COLUMN "
-        + quote(col)
-        + SPACE
-        + typeConverter.fromGravitino(change.getNewDataType())
-        + SPACE
-        + (column.nullable() ? "NULL" : "NOT NULL")
-        + ";";
+    // The default is dropped rather than reattached, matching what the MySQL catalog does when a
+    // column type changes: the old expression was written against the old type and SQL Server
+    // would rebind it verbatim.
+    String qualified = qualifiedTable(schemaName, jdbcTable.name());
+    return dropDefaultConstraintSql(qualified, col)
+        + alterColumnSql(
+            qualified,
+            col,
+            typeConverter.fromGravitino(change.getNewDataType()),
+            column.nullable());
   }
 
   private String updateColumnCommentDefinition(
@@ -794,14 +1019,31 @@ public class SqlServerTableOperations extends JdbcTableOperations
     }
     String col = change.fieldName()[0];
     JdbcColumn column = requireColumn(jdbcTable, col);
+
+    // Only nullability changes here, so the default goes back on afterwards, matching what the
+    // MySQL catalog does with the same change.
+    String qualified = qualifiedTable(schemaName, jdbcTable.name());
+    return dropDefaultConstraintSql(qualified, col)
+        + alterColumnSql(
+            qualified, col, typeConverter.fromGravitino(column.dataType()), change.nullable())
+        + NEW_LINE
+        + restoreDefaultConstraintSql(qualified, col);
+  }
+
+  /**
+   * Builds an {@code ALTER COLUMN}, which replaces the whole column definition and therefore has to
+   * restate the nullability even when it is not what changed.
+   */
+  private static String alterColumnSql(
+      String qualifiedTable, String column, String dataType, boolean nullable) {
     return ALTER_TABLE
-        + qualifiedTable(schemaName, jdbcTable.name())
+        + qualifiedTable
         + " ALTER COLUMN "
-        + quote(col)
+        + quote(column)
         + SPACE
-        + typeConverter.fromGravitino(column.dataType())
+        + dataType
         + SPACE
-        + (change.nullable() ? "NULL" : "NOT NULL")
+        + (nullable ? "NULL" : "NOT NULL")
         + ";";
   }
 

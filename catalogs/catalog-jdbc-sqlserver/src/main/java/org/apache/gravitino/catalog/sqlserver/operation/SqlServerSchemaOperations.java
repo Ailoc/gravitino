@@ -21,6 +21,7 @@ package org.apache.gravitino.catalog.sqlserver.operation;
 import static org.apache.gravitino.catalog.sqlserver.operation.SqlServerTableOperations.escapeLiteral;
 import static org.apache.gravitino.catalog.sqlserver.operation.SqlServerTableOperations.quote;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
@@ -87,11 +88,15 @@ public class SqlServerSchemaOperations extends JdbcDatabaseOperations {
   }
 
   /**
-   * Creates a SQL Server schema.
+   * Creates a SQL Server schema, then stores its comment as an extended property.
    *
    * <p>The base implementation switches the connection away from the database it is about to
    * create, which is a MySQL-ism. In SQL Server a schema lives inside the connected database, so
    * that switch is both unnecessary and invalid.
+   *
+   * <p>The statements also have to run one at a time rather than as the single batch the base
+   * implementation sends, because {@code CREATE SCHEMA} must be alone in its batch. See {@link
+   * #generateCreateDatabaseSqls}.
    */
   @Override
   public void create(String schemaName, String comment, Map<String, String> properties)
@@ -109,8 +114,9 @@ public class SqlServerSchemaOperations extends JdbcDatabaseOperations {
       if (schemaExists(connection, schemaName)) {
         throw SqlServerExceptionConverter.schemaAlreadyExists(schemaName);
       }
-      JdbcConnectorUtils.executeUpdate(
-          connection, generateCreateDatabaseSql(schemaName, comment, properties));
+      for (String sql : generateCreateDatabaseSqls(schemaName, comment, properties)) {
+        JdbcConnectorUtils.executeUpdate(connection, sql);
+      }
       LOG.info("Finished creating schema {}", schemaName);
     } catch (SQLException se) {
       throw exceptionMapper.toGravitinoException(se);
@@ -161,7 +167,41 @@ public class SqlServerSchemaOperations extends JdbcDatabaseOperations {
   }
 
   /**
-   * SQL Server stores descriptions as extended properties rather than as a native comment clause.
+   * Generates the statements creating a schema, in the order they have to run.
+   *
+   * <p>{@code CREATE SCHEMA} has to be the only statement in its T-SQL batch, so the extended
+   * property carrying the comment cannot be appended to it. Joining the two with a semicolon and
+   * sending them as one batch is what makes the driver report {@code Incorrect syntax near the
+   * keyword 'EXEC'}, and because {@code JdbcCatalogOperations} always attaches the Gravitino id as
+   * a comment, that batch would be generated on every single schema creation.
+   *
+   * @param schema the schema to create
+   * @param comment the comment, stored as an {@code MS_Description} extended property
+   * @param properties the schema properties, which SQL Server does not persist
+   * @return the statements to run, the second present only when there is a comment
+   */
+  @VisibleForTesting
+  List<String> generateCreateDatabaseSqls(
+      String schema, String comment, Map<String, String> properties) {
+    List<String> statements = new ArrayList<>();
+    statements.add(generateCreateDatabaseSql(schema, comment, properties));
+    if (StringUtils.isNotEmpty(comment)) {
+      statements.add(schemaCommentSql(schema, comment));
+    }
+    return statements;
+  }
+
+  /**
+   * Generates the {@code CREATE SCHEMA} statement on its own.
+   *
+   * <p>The {@code comment} argument is deliberately unused: SQL Server stores a description as an
+   * extended property, and {@code CREATE SCHEMA} must be alone in its batch, so the comment is
+   * emitted as a separate statement by {@link #generateCreateDatabaseSqls}.
+   *
+   * @param schema the schema to create
+   * @param comment ignored, stored by a separate statement
+   * @param properties the schema properties, which SQL Server does not persist
+   * @return the statement creating the schema
    */
   @Override
   public String generateCreateDatabaseSql(
@@ -170,18 +210,7 @@ public class SqlServerSchemaOperations extends JdbcDatabaseOperations {
       throw new UnsupportedOperationException(
           "SQL Server does not support properties on schema create.");
     }
-
-    StringBuilder sqlBuilder = new StringBuilder("CREATE SCHEMA " + quote(schema));
-    if (StringUtils.isNotEmpty(comment)) {
-      sqlBuilder
-          .append(";\n")
-          .append(
-              addExtendedPropertySql(
-                  comment,
-                  String.format(
-                      "@level0type = N'SCHEMA', @level0name = N'%s'", escapeLiteral(schema))));
-    }
-    return sqlBuilder.toString();
+    return "CREATE SCHEMA " + quote(schema);
   }
 
   /**
@@ -264,9 +293,36 @@ public class SqlServerSchemaOperations extends JdbcDatabaseOperations {
         escapeLiteral(comment), levelClause);
   }
 
+  /**
+   * Builds the statement storing a schema description as an {@code MS_Description}.
+   *
+   * @param schema the schema to describe
+   * @param comment the description text
+   * @return the statement storing the description
+   */
+  private static String schemaCommentSql(String schema, String comment) {
+    return addExtendedPropertySql(
+        comment,
+        String.format("@level0type = N'SCHEMA', @level0name = N'%s'", escapeLiteral(schema)));
+  }
+
+  /**
+   * Reads the schemas of the connected database.
+   *
+   * <p>The catalog argument is deliberately {@code null}. mssql-jdbc answers {@code getSchemas}
+   * with zero rows when a non-null catalog is combined with a null schema pattern, which is exactly
+   * the combination {@code listDatabases} needs, so naming the catalog here would silently
+   * enumerate nothing. Leaving it unfiltered widens nothing: the connection is already bound to one
+   * database.
+   *
+   * @param connection the connection bound to the target database
+   * @param schemaPattern the pattern to match schema names against, or null for all of them
+   * @return the matching schemas
+   * @throws SQLException if the metadata query fails
+   */
   private ResultSet getSchemas(Connection connection, String schemaPattern) throws SQLException {
     DatabaseMetaData metaData = connection.getMetaData();
-    return metaData.getSchemas(connection.getCatalog(), schemaPattern);
+    return metaData.getSchemas(null, schemaPattern);
   }
 
   private String getSchemaComment(Connection connection, String schema) throws SQLException {

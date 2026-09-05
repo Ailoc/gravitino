@@ -60,6 +60,14 @@ public class SqlServerTypeConverter extends JdbcTypeConverter {
   static final String ROWVERSION = "timestamp";
 
   /**
+   * Marker the driver appends to the type name of an identity column, reporting {@code bigint
+   * identity} rather than {@code bigint}. Identity is a property of the column and not a type of
+   * its own, and Gravitino already carries it as the column's auto-increment flag, so it is
+   * stripped before the name is matched.
+   */
+  @VisibleForTesting static final String IDENTITY_MARKER = " identity";
+
+  /**
    * Maximum length accepted by {@code nvarchar(n)} / {@code nchar(n)} before {@code max} is needed.
    */
   @VisibleForTesting static final int MAX_UNICODE_LENGTH = 4000;
@@ -73,7 +81,7 @@ public class SqlServerTypeConverter extends JdbcTypeConverter {
 
   @Override
   public Type toGravitino(JdbcTypeBean typeBean) {
-    String typeName = typeBean.getTypeName().toLowerCase(Locale.ROOT);
+    String typeName = stripIdentityMarker(typeBean.getTypeName().toLowerCase(Locale.ROOT));
     switch (typeName) {
       case BIT:
         return Types.BooleanType.get();
@@ -199,7 +207,31 @@ public class SqlServerTypeConverter extends JdbcTypeConverter {
     return Types.DecimalType.of(columnSize, scale == null ? 0 : scale);
   }
 
-  private boolean isUnsized(Integer columnSize) {
+  /**
+   * Removes the identity marker the driver folds into a column's type name, so that {@code bigint
+   * identity} maps as {@code bigint} rather than falling through to an external type.
+   *
+   * @param typeName the lower case type name as reported by the driver
+   * @return the type name without the identity marker
+   */
+  private static String stripIdentityMarker(String typeName) {
+    int marker = typeName.indexOf(IDENTITY_MARKER);
+    return marker < 0 ? typeName : typeName.substring(0, marker).trim();
+  }
+
+  /**
+   * Reports whether a column size means "unbounded" rather than a count of characters.
+   *
+   * <p>The driver spells {@code varchar(max)} and its siblings inconsistently, as {@code -1} in
+   * some paths and as {@link Integer#MAX_VALUE} in others, so both have to be recognised. Shared
+   * with {@link SqlServerColumnDefaultValueConverter}, which would otherwise read a default on a
+   * {@code nvarchar(max)} column back as a varchar of length {@code 2147483647} against a column
+   * that maps to {@link Types.StringType}.
+   *
+   * @param columnSize the size the driver reported, possibly null
+   * @return true if the column is unbounded
+   */
+  static boolean isUnsized(Integer columnSize) {
     return columnSize == null || columnSize == UNSIZED_LENGTH || columnSize == Integer.MAX_VALUE;
   }
 }

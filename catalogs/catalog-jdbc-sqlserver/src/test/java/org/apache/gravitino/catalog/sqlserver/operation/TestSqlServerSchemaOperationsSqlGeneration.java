@@ -19,7 +19,9 @@
 package org.apache.gravitino.catalog.sqlserver.operation;
 
 import com.google.common.collect.ImmutableMap;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -36,32 +38,48 @@ public class TestSqlServerSchemaOperationsSqlGeneration {
     Assertions.assertEquals(
         "CREATE SCHEMA [test_schema]",
         operations.generateCreateDatabaseSql("test_schema", "", Collections.emptyMap()));
+    Assertions.assertEquals(
+        Collections.singletonList("CREATE SCHEMA [test_schema]"),
+        operations.generateCreateDatabaseSqls("test_schema", null, Collections.emptyMap()));
+    Assertions.assertEquals(
+        Collections.singletonList("CREATE SCHEMA [test_schema]"),
+        operations.generateCreateDatabaseSqls("test_schema", "", Collections.emptyMap()));
   }
 
+  /**
+   * {@code CREATE SCHEMA} has to be the only statement in its T-SQL batch, so the extended property
+   * carrying the comment is a second statement rather than something appended to the first. Sending
+   * the two as one batch is what makes the driver report {@code Incorrect syntax near the keyword
+   * 'EXEC'}.
+   */
   @Test
   public void testCreateSchemaWithComment() {
-    String sql =
-        operations.generateCreateDatabaseSql(
+    List<String> statements =
+        operations.generateCreateDatabaseSqls(
             "test_schema", "a plain comment", Collections.emptyMap());
 
     Assertions.assertEquals(
-        "CREATE SCHEMA [test_schema];\n"
-            + "EXEC sp_addextendedproperty @name = N'MS_Description', "
-            + "@value = N'a plain comment', "
-            + "@level0type = N'SCHEMA', @level0name = N'test_schema'",
-        sql);
+        Arrays.asList(
+            "CREATE SCHEMA [test_schema]",
+            "EXEC sp_addextendedproperty @name = N'MS_Description', "
+                + "@value = N'a plain comment', "
+                + "@level0type = N'SCHEMA', @level0name = N'test_schema'"),
+        statements);
+    Assertions.assertFalse(statements.get(0).contains("EXEC"), statements.get(0));
   }
 
   /** A single quote is escaped by doubling it, which keeps the injected text inside the literal. */
   @Test
   public void testCreateSchemaEscapesQuoteInComment() {
-    String sql =
-        operations.generateCreateDatabaseSql(
+    List<String> statements =
+        operations.generateCreateDatabaseSqls(
             "test_schema", "owner's comment; DROP SCHEMA marker; --", Collections.emptyMap());
 
     Assertions.assertTrue(
-        sql.contains("@value = N'owner''s comment; DROP SCHEMA marker; --'"), sql);
-    Assertions.assertTrue(sql.contains("@level0name = N'test_schema'"), sql);
+        statements.get(1).contains("@value = N'owner''s comment; DROP SCHEMA marker; --'"),
+        statements.get(1));
+    Assertions.assertTrue(
+        statements.get(1).contains("@level0name = N'test_schema'"), statements.get(1));
   }
 
   /**
@@ -71,21 +89,23 @@ public class TestSqlServerSchemaOperationsSqlGeneration {
    */
   @Test
   public void testCreateSchemaKeepsBackslashVerbatim() {
-    String sql =
-        operations.generateCreateDatabaseSql(
+    List<String> statements =
+        operations.generateCreateDatabaseSqls(
             "test_schema", "C:\\data\\notes", Collections.emptyMap());
 
-    Assertions.assertTrue(sql.contains("@value = N'C:\\data\\notes'"), sql);
-    Assertions.assertFalse(sql.contains("\\\\"), sql);
+    Assertions.assertTrue(
+        statements.get(1).contains("@value = N'C:\\data\\notes'"), statements.get(1));
+    Assertions.assertFalse(statements.get(1).contains("\\\\"), statements.get(1));
   }
 
   @Test
   public void testCreateSchemaEscapesQuoteInSchemaName() {
-    String sql =
-        operations.generateCreateDatabaseSql("odd'name", "comment", Collections.emptyMap());
+    List<String> statements =
+        operations.generateCreateDatabaseSqls("odd'name", "comment", Collections.emptyMap());
 
-    Assertions.assertTrue(sql.contains("CREATE SCHEMA [odd'name]"), sql);
-    Assertions.assertTrue(sql.contains("@level0name = N'odd''name'"), sql);
+    Assertions.assertEquals("CREATE SCHEMA [odd'name]", statements.get(0));
+    Assertions.assertTrue(
+        statements.get(1).contains("@level0name = N'odd''name'"), statements.get(1));
   }
 
   /** A closing bracket inside an identifier is doubled so it cannot terminate the quoting early. */
@@ -102,6 +122,11 @@ public class TestSqlServerSchemaOperationsSqlGeneration {
         UnsupportedOperationException.class,
         () ->
             operations.generateCreateDatabaseSql(
+                "test_schema", null, ImmutableMap.of("key", "value")));
+    Assertions.assertThrows(
+        UnsupportedOperationException.class,
+        () ->
+            operations.generateCreateDatabaseSqls(
                 "test_schema", null, ImmutableMap.of("key", "value")));
   }
 
