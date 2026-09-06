@@ -82,6 +82,32 @@ public class CatalogNameAdaptor {
           "3.5",
           "org.apache.gravitino.spark.connector.jdbc.postgresql.GravitinoPostgreSqlCatalogSpark35");
 
+  private static final Map<String, String> oracleCatalogNames =
+      ImmutableMap.of(
+          "3.3",
+          "org.apache.gravitino.spark.connector.jdbc.oracle.GravitinoOracleCatalogSpark33",
+          "3.4",
+          "org.apache.gravitino.spark.connector.jdbc.oracle.GravitinoOracleCatalogSpark34",
+          "3.5",
+          "org.apache.gravitino.spark.connector.jdbc.oracle.GravitinoOracleCatalogSpark35");
+
+  private static final Map<String, String> sqlServerCatalogNames =
+      ImmutableMap.of(
+          "3.3",
+          "org.apache.gravitino.spark.connector.jdbc.sqlserver.GravitinoSqlServerCatalogSpark33",
+          "3.4",
+          "org.apache.gravitino.spark.connector.jdbc.sqlserver.GravitinoSqlServerCatalogSpark34",
+          "3.5",
+          "org.apache.gravitino.spark.connector.jdbc.sqlserver.GravitinoSqlServerCatalogSpark35");
+
+  // JDBC providers that need their own catalog class. Any other jdbc-* provider, such as
+  // jdbc-mysql or jdbc-doris, keeps using the generic one.
+  private static final Map<String, Map<String, String>> jdbcCatalogNamesByProvider =
+      ImmutableMap.of(
+          "jdbc-postgresql", pgCatalogNames,
+          "jdbc-oracle", oracleCatalogNames,
+          "jdbc-sqlserver", sqlServerCatalogNames);
+
   private static String sparkVersion() {
     return package$.MODULE$.SPARK_VERSION();
   }
@@ -89,10 +115,7 @@ public class CatalogNameAdaptor {
   private static String getCatalogName(String provider, int majorVersion, int minorVersion) {
     String versionKey = String.format("%d.%d", majorVersion, minorVersion);
     if (provider.startsWith("jdbc")) {
-      if (provider.startsWith("jdbc-postgresql")) {
-        return pgCatalogNames.get(versionKey);
-      }
-      return jdbcCatalogNames.get(versionKey);
+      return jdbcCatalogNamesByProvider.getOrDefault(provider, jdbcCatalogNames).get(versionKey);
     }
     String key = String.format("%s-%s", provider.toLowerCase(Locale.ROOT), versionKey);
     return catalogNames.get(key);
