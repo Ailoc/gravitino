@@ -19,6 +19,7 @@
 package org.apache.gravitino.catalog.sqlserver.operation;
 
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -132,6 +133,32 @@ public class TestSqlServerSchemaOperationsMetadata {
 
     Assertions.assertTrue(operations.exist("dbo"));
     verify(metaData).getSchemas(null, "dbo");
+  }
+
+  /**
+   * SQL Server reports a missing schema, a missing table and a missing permission with the same
+   * error, so the drop has to establish the absence itself for the shared {@code delete} to answer
+   * false rather than propagate. Dropping a schema twice is what a caller does to find out whether
+   * it is still there.
+   */
+  @Test
+  public void testDeleteOfMissingSchemaIsFalse() throws SQLException {
+    Connection connection = mock(Connection.class);
+    DatabaseMetaData metaData = mock(DatabaseMetaData.class);
+    ResultSet resultSet = mock(ResultSet.class);
+    DataSource dataSource = mock(DataSource.class);
+
+    when(connection.getCatalog()).thenReturn(DATABASE);
+    when(connection.getMetaData()).thenReturn(metaData);
+    when(dataSource.getConnection()).thenReturn(connection);
+    when(metaData.getSchemas(null, "gone")).thenReturn(resultSet);
+    when(resultSet.next()).thenReturn(false);
+
+    TestableSqlServerSchemaOperations operations =
+        new TestableSqlServerSchemaOperations(dataSource);
+
+    Assertions.assertFalse(operations.delete("gone", false));
+    verify(connection, never()).createStatement();
   }
 
   private static TestableSqlServerSchemaOperations operationsReturning(

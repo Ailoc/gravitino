@@ -235,8 +235,20 @@ public class SqlServerSchemaOperations extends JdbcDatabaseOperations {
         + quotedSchema;
   }
 
+  /**
+   * Drops a schema, reporting one that is not there rather than letting SQL Server's error through.
+   *
+   * <p>SQL Server answers a {@code DROP SCHEMA} of a missing schema with error 3701, which it also
+   * uses for a missing table and for a missing permission, so the absence cannot be read off the
+   * error the way PostgreSQL's distinct SQLSTATEs allow. It has to be established here instead,
+   * because {@link JdbcDatabaseOperations#delete} translates only {@link NoSuchSchemaException}
+   * into the {@code false} a repeated drop has to return.
+   */
   @Override
   protected void dropDatabase(String schema, boolean cascade) {
+    if (!exist(schema)) {
+      throw SqlServerExceptionConverter.noSuchSchema(schema);
+    }
     if (!cascade && !isSchemaEmpty(schema)) {
       throw new IllegalStateException(
           String.format("Schema %s is not empty, the value of cascade should be true.", schema));

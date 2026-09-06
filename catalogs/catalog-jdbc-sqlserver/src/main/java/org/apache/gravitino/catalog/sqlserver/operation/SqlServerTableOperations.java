@@ -50,6 +50,7 @@ import org.apache.gravitino.catalog.jdbc.operation.DatabaseOperation;
 import org.apache.gravitino.catalog.jdbc.operation.JdbcTableOperations;
 import org.apache.gravitino.catalog.jdbc.operation.RequireDatabaseOperation;
 import org.apache.gravitino.catalog.jdbc.utils.JdbcConnectorUtils;
+import org.apache.gravitino.catalog.sqlserver.converter.SqlServerExceptionConverter;
 import org.apache.gravitino.exceptions.NoSuchColumnException;
 import org.apache.gravitino.exceptions.NoSuchSchemaException;
 import org.apache.gravitino.exceptions.NoSuchTableException;
@@ -387,24 +388,23 @@ public class SqlServerTableOperations extends JdbcTableOperations
     return generateDropTableSql(schemaName, tableName);
   }
 
+  /**
+   * Drops a table, reporting one that is not there rather than letting SQL Server's error through.
+   *
+   * <p>{@link JdbcTableOperations#drop} turns only {@link NoSuchTableException} into the {@code
+   * false} that dropping an already dropped table has to return. See {@link #dropExistingTable}.
+   */
   @Override
   protected void dropTable(String schemaName, String tableName) {
     LOG.info("Attempting to delete table {} from schema {}", tableName, schemaName);
-    try (Connection connection = getConnection(schemaName)) {
-      JdbcConnectorUtils.executeUpdate(connection, generateDropTableSql(schemaName, tableName));
-    } catch (SQLException se) {
-      throw exceptionMapper.toGravitinoException(se);
-    }
+    dropExistingTable(schemaName, tableName, generateDropTableSql(schemaName, tableName));
   }
 
+  /** SQL Server has no recycle bin, so purging a table issues the same statement as dropping it. */
   @Override
   protected void purgeTable(String schemaName, String tableName) {
     LOG.info("Attempting to purge table {} from schema {}", tableName, schemaName);
-    try (Connection connection = getConnection(schemaName)) {
-      JdbcConnectorUtils.executeUpdate(connection, generatePurgeTableSql(schemaName, tableName));
-    } catch (SQLException se) {
-      throw exceptionMapper.toGravitinoException(se);
-    }
+    dropExistingTable(schemaName, tableName, generatePurgeTableSql(schemaName, tableName));
   }
 
   @Override
@@ -1167,5 +1167,47 @@ public class SqlServerTableOperations extends JdbcTableOperations
             .filter(c -> c.name().equals(col))
             .findFirst()
             .orElseThrow(() -> new NoSuchColumnException("Column %s does not exist.", col));
+  }
+
+  /**
+   * Runs a drop statement only after establishing that the table it names is there.
+   *
+   * <p>SQL Server answers a {@code DROP TABLE} of a missing table with error 3701, which it also
+   * uses for a missing schema and for a missing permission, so the absence cannot be read off the
+   * error the way PostgreSQL's distinct SQLSTATEs allow. It has to be established here instead,
+   * because {@link JdbcTableOperations#drop} and {@link JdbcTableOperations#purge} translate only
+   * {@link NoSuchTableException} into the {@code false} a repeated drop has to return.
+   *
+   * @param schemaName the schema holding the table
+   * @param tableName the table to drop
+   * @param sql the statement dropping it
+   */
+  private void dropExistingTable(String schemaName, String tableName, String sql) {
+    try (Connection connection = getConnection(schemaName)) {
+      if (!tableExists(connection, schemaName, tableName)) {
+        throw SqlServerExceptionConverter.noSuchTable(schemaName, tableName);
+      }
+      JdbcConnectorUtils.executeUpdate(connection, sql);
+    } catch (SQLException se) {
+      throw exceptionMapper.toGravitinoException(se);
+    }
+  }
+
+  /**
+   * Reports whether the schema holds a table with exactly this name.
+   *
+   * <p>The driver treats both arguments as {@code LIKE} patterns, so the rows it returns still have
+   * to be compared, or a name such as {@code a_c} would match a table called {@code abc}.
+   */
+  private boolean tableExists(Connection connection, String schemaName, String tableName)
+      throws SQLException {
+    try (ResultSet tables = getTable(connection, schemaName, tableName)) {
+      while (tables.next()) {
+        if (Objects.equals(tables.getString("TABLE_NAME"), tableName)) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 }

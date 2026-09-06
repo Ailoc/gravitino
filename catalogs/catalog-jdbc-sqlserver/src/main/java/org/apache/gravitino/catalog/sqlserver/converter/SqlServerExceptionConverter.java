@@ -98,13 +98,26 @@ public class SqlServerExceptionConverter extends JdbcExceptionConverter {
   }
 
   /**
-   * Exposed so schema loading can report a missing schema rather than the ambiguous "invalid object
-   * name" error SQL Server produces.
+   * Exposed so a schema lookup or drop can report a missing schema rather than the ambiguous
+   * "invalid object name" error SQL Server produces.
    *
    * @param schemaName the schema that could not be found
    * @return the exception to raise
    */
   public static NoSuchSchemaException noSuchSchema(String schemaName) {
     return new NoSuchSchemaException("No such schema: %s", schemaName);
+  }
+
+  /**
+   * Exposed so a table drop can report a table that is not there. SQL Server answers a {@code DROP
+   * TABLE} of a missing table with error 3701, the same error it uses for a missing schema and for
+   * a missing permission, so which of the three it was cannot be read off the error.
+   *
+   * @param schemaName the schema the table was expected in
+   * @param tableName the table that could not be found
+   * @return the exception to raise
+   */
+  public static NoSuchTableException noSuchTable(String schemaName, String tableName) {
+    return new NoSuchTableException("Table %s does not exist in schema %s.", tableName, schemaName);
   }
 }

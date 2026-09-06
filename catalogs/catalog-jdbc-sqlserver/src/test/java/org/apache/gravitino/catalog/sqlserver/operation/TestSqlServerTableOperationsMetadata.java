@@ -22,18 +22,22 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.startsWith;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import javax.sql.DataSource;
 import org.apache.gravitino.catalog.jdbc.JdbcColumn;
 import org.apache.gravitino.catalog.jdbc.JdbcTable;
+import org.apache.gravitino.catalog.sqlserver.converter.SqlServerExceptionConverter;
 import org.apache.gravitino.rel.Column;
 import org.apache.gravitino.rel.types.Types;
 import org.junit.jupiter.api.Assertions;
@@ -167,6 +171,55 @@ public class TestSqlServerTableOperationsMetadata {
     Assertions.assertSame(column, builder.columns()[0]);
   }
 
+  /**
+   * SQL Server reports a missing table, a missing schema and a missing permission with the same
+   * error, so the drop has to establish the absence itself for the shared implementation to answer
+   * false rather than propagate. Dropping a table twice is what a caller does to find out whether
+   * it is still there.
+   */
+  @Test
+  public void testDropOfMissingTableIsFalse() throws SQLException {
+    Connection connection = mock(Connection.class);
+    ResultSet tables = mock(ResultSet.class);
+    SqlServerTableOperations operations = operationsDropping(connection, tables);
+
+    when(tables.next()).thenReturn(false);
+
+    Assertions.assertFalse(operations.drop(SCHEMA, TABLE));
+    verify(connection, never()).createStatement();
+  }
+
+  /** Purging shares the drop path, so a table that is not there reports the same way. */
+  @Test
+  public void testPurgeOfMissingTableIsFalse() throws SQLException {
+    Connection connection = mock(Connection.class);
+    ResultSet tables = mock(ResultSet.class);
+    SqlServerTableOperations operations = operationsDropping(connection, tables);
+
+    when(tables.next()).thenReturn(false);
+
+    Assertions.assertFalse(operations.purge(SCHEMA, TABLE));
+    verify(connection, never()).createStatement();
+  }
+
+  /**
+   * The driver treats the table name as a {@code LIKE} pattern and an underscore is its single
+   * character wildcard, so the rows it returns still have to be compared; without that, dropping
+   * {@code test_table} would issue a statement naming a table called {@code testXtable}.
+   */
+  @Test
+  public void testDropOfATableOnlyThePatternMatchesIsFalse() throws SQLException {
+    Connection connection = mock(Connection.class);
+    ResultSet tables = mock(ResultSet.class);
+    SqlServerTableOperations operations = operationsDropping(connection, tables);
+
+    when(tables.next()).thenReturn(true, false);
+    when(tables.getString("TABLE_NAME")).thenReturn("testXtable");
+
+    Assertions.assertFalse(operations.drop(SCHEMA, TABLE));
+    verify(connection, never()).createStatement();
+  }
+
   private static JdbcColumn column(String name) {
     return JdbcColumn.builder()
         .withName(name)
@@ -197,5 +250,37 @@ public class TestSqlServerTableOperationsMetadata {
     when(resultSet.getString(anyInt()))
         .thenAnswer(call -> result.get(cursor.get())[call.getArgument(0, Integer.class) - 1]);
     return resultSet;
+  }
+
+  /**
+   * Wires the drop path up to a table metadata read answering with the supplied rows.
+   *
+   * <p>The catalog is left unstubbed, so it answers null, which is what the drop path passes to
+   * {@code getTables} for a connection already bound to the one database the catalog maps to.
+   *
+   * @param connection the connection to hand out
+   * @param tables the rows the table metadata read answers with
+   * @return the operations to drive
+   * @throws SQLException if stubbing the collaborators fails
+   */
+  private static SqlServerTableOperations operationsDropping(
+      Connection connection, ResultSet tables) throws SQLException {
+    DatabaseMetaData metaData = mock(DatabaseMetaData.class);
+    DataSource dataSource = mock(DataSource.class);
+
+    when(connection.getMetaData()).thenReturn(metaData);
+    when(dataSource.getConnection()).thenReturn(connection);
+    when(metaData.getTables(null, SCHEMA, TABLE, null)).thenReturn(tables);
+
+    return new TestableSqlServerTableOperations(dataSource);
+  }
+
+  /** Supplies the collaborators {@link SqlServerTableOperations} would get from a catalog. */
+  private static class TestableSqlServerTableOperations extends SqlServerTableOperations {
+
+    TestableSqlServerTableOperations(DataSource dataSource) {
+      super.dataSource = dataSource;
+      super.exceptionMapper = new SqlServerExceptionConverter();
+    }
   }
 }
