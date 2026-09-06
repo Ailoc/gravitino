@@ -39,11 +39,20 @@ dependencies {
   implementation(libs.guava)
 
   testImplementation(project(":api"))
+  testImplementation(project(":catalogs:catalog-jdbc-common", "testArtifacts"))
+  testImplementation(project(":clients:client-java"))
   testImplementation(project(":common"))
   testImplementation(project(":core"))
+  testImplementation(project(":integration-test-common", "testArtifacts"))
+  testImplementation(project(":server"))
+  testImplementation(project(":server-common"))
 
+  testImplementation(libs.awaitility)
   testImplementation(libs.junit.jupiter.api)
+  testImplementation(libs.junit.jupiter.params)
   testImplementation(libs.mockito.core)
+  testImplementation(libs.oracle.driver)
+  testImplementation(libs.testcontainers)
 
   testRuntimeOnly(libs.junit.jupiter.engine)
 }
