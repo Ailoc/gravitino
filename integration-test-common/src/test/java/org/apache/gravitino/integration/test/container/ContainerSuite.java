@@ -85,6 +85,9 @@ public class ContainerSuite implements Closeable {
       new EnumMap<>(PGImageName.class);
   private static volatile Map<DorisImageName, DorisContainer> dorisContainerMap =
       new EnumMap<>(DorisImageName.class);
+  private static volatile Map<SqlServerImageName, SqlServerContainer> sqlServerContainerMap =
+      new EnumMap<>(SqlServerImageName.class);
+  private static volatile OracleContainer oracleContainer;
   private static volatile OceanBaseContainer oceanBaseContainer;
   private static volatile ClickHouseContainer clickHouseContainer;
   private static volatile ClickHouseContainer clickHouseClusterContainer;
@@ -456,6 +459,71 @@ public class ContainerSuite implements Closeable {
     startPostgreSQLContainer(testDatabaseName, PGImageName.VERSION_13);
   }
 
+  public void startSqlServerContainer(
+      TestDatabaseName testDatabaseName, SqlServerImageName sqlServerImageName) {
+    ITUtils.cleanDisk();
+    if (!sqlServerContainerMap.containsKey(sqlServerImageName)) {
+      synchronized (ContainerSuite.class) {
+        if (!sqlServerContainerMap.containsKey(sqlServerImageName)) {
+          initIfNecessary();
+          // Start SQL Server container
+          SqlServerContainer.Builder sqlServerBuilder =
+              SqlServerContainer.builder()
+                  .withImage(sqlServerImageName.toString())
+                  .withHostName(SqlServerContainer.HOST_NAME)
+                  .withEnvVars(
+                      ImmutableMap.<String, String>builder()
+                          .put("ACCEPT_EULA", "Y")
+                          .put("MSSQL_SA_PASSWORD", SqlServerContainer.PASSWORD)
+                          .put("MSSQL_PID", "Developer")
+                          .build())
+                  .withExposePorts(ImmutableSet.of(SqlServerContainer.SQLSERVER_PORT))
+                  .withNetwork(network);
+
+          SqlServerContainer container = closer.register(sqlServerBuilder.build());
+          container.start();
+          sqlServerContainerMap.put(sqlServerImageName, container);
+        }
+      }
+    }
+    synchronized (SqlServerContainer.class) {
+      sqlServerContainerMap.get(sqlServerImageName).createDatabase(testDatabaseName);
+    }
+  }
+
+  public void startSqlServerContainer(TestDatabaseName testDatabaseName) {
+    startSqlServerContainer(testDatabaseName, SqlServerContainer.DEFAULT_IMAGE);
+  }
+
+  /**
+   * Starts Oracle Database Free. Oracle maps a schema onto a user, so unlike the other relational
+   * containers there is no test database to create here.
+   */
+  public void startOracleContainer() {
+    ITUtils.cleanDisk();
+    if (oracleContainer == null) {
+      synchronized (ContainerSuite.class) {
+        if (oracleContainer == null) {
+          initIfNecessary();
+          // Start Oracle container
+          OracleContainer.Builder oracleBuilder =
+              OracleContainer.builder()
+                  .withHostName(OracleContainer.HOST_NAME)
+                  .withEnvVars(
+                      ImmutableMap.<String, String>builder()
+                          .put("ORACLE_PWD", OracleContainer.PASSWORD)
+                          .build())
+                  .withExposePorts(ImmutableSet.of(OracleContainer.ORACLE_PORT))
+                  .withNetwork(network);
+
+          OracleContainer container = closer.register(oracleBuilder.build());
+          container.start();
+          oracleContainer = container;
+        }
+      }
+    }
+  }
+
   public void startOceanBaseContainer() {
     ITUtils.cleanDisk();
     // create dir /tmp/obdata by CommandExecutor
@@ -814,6 +882,29 @@ public class ContainerSuite implements Closeable {
               pgImageName));
     }
     return pgContainerMap.get(pgImageName);
+  }
+
+  public SqlServerContainer getSqlServerContainer() throws NoSuchElementException {
+    return getSqlServerContainer(SqlServerContainer.DEFAULT_IMAGE);
+  }
+
+  public SqlServerContainer getSqlServerContainer(SqlServerImageName sqlServerImageName)
+      throws NoSuchElementException {
+    if (!sqlServerContainerMap.containsKey(sqlServerImageName)) {
+      throw new NoSuchElementException(
+          String.format(
+              "SQL Server container %s not found, please create it by calling startSqlServerContainer() first",
+              sqlServerImageName));
+    }
+    return sqlServerContainerMap.get(sqlServerImageName);
+  }
+
+  public OracleContainer getOracleContainer() throws NoSuchElementException {
+    if (oracleContainer == null) {
+      throw new NoSuchElementException(
+          "Oracle container not found, please create it by calling startOracleContainer() first");
+    }
+    return oracleContainer;
   }
 
   public OceanBaseContainer getOceanBaseContainer() {

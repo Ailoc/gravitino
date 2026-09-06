@@ -31,8 +31,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.apache.gravitino.Catalog;
 import org.apache.gravitino.NameIdentifier;
@@ -44,9 +42,13 @@ import org.apache.gravitino.catalog.sqlserver.integration.test.service.SqlServer
 import org.apache.gravitino.client.GravitinoMetalake;
 import org.apache.gravitino.exceptions.NoSuchSchemaException;
 import org.apache.gravitino.exceptions.SchemaAlreadyExistsException;
+import org.apache.gravitino.integration.test.container.ContainerSuite;
+import org.apache.gravitino.integration.test.container.SqlServerContainer;
+import org.apache.gravitino.integration.test.container.SqlServerImageName;
 import org.apache.gravitino.integration.test.util.BaseIT;
 import org.apache.gravitino.integration.test.util.GravitinoITUtils;
 import org.apache.gravitino.integration.test.util.ITUtils;
+import org.apache.gravitino.integration.test.util.TestDatabaseName;
 import org.apache.gravitino.rel.Column;
 import org.apache.gravitino.rel.Table;
 import org.apache.gravitino.rel.TableCatalog;
@@ -64,66 +66,39 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.TestInstance.Lifecycle;
-import org.junit.jupiter.api.condition.EnabledIf;
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
-import org.junit.platform.commons.util.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
  * Integration test for the SQL Server JDBC catalog.
  *
- * <p>These tests run against a SQL Server instance you provide rather than one they start. Set the
- * following environment variables to enable them:
- *
- * <ul>
- *   <li>{@code GRAVITINO_TEST_CLOUD_IT} - must be {@code true}
- *   <li>{@code GRAVITINO_SQLSERVER_JDBC_URL} - for example {@code
- *       jdbc:sqlserver://host:1433;databaseName=master;encrypt=false}. The {@code databaseName} is
- *       what the catalog needs as {@code jdbc-database}, so a URL without it disables the tests.
- *   <li>{@code GRAVITINO_SQLSERVER_USERNAME} - an account able to create and drop schemas in that
- *       database
- *   <li>{@code GRAVITINO_SQLSERVER_PASSWORD}
- * </ul>
- *
- * <p>Run them with {@code ./gradlew :catalogs:catalog-jdbc-sqlserver:test -PskipTests}, exporting
- * the variables in the same shell. The Gradle daemon captures the environment when it starts, so
- * pass {@code --no-daemon} or stop a running daemon first.
+ * <p>These tests start their own SQL Server container, so they need Docker and run only under
+ * {@code -PskipDockerTests=false}. Subclasses such as {@code CatalogSqlServerVersion2017IT} pin a
+ * different release by setting {@link #sqlServerImageName} in their constructor.
  *
  * <p>Each test drives the catalog through the REST client and then reads SQL Server's catalog views
  * directly, so a statement the catalog failed to issue is caught rather than echoed back. That
  * matters most for {@code alterTable}, which builds one T-SQL batch whose statements SQL Server can
  * silently stop applying part way through.
  */
-@EnabledIfEnvironmentVariable(named = "GRAVITINO_TEST_CLOUD_IT", matches = "true")
-@EnabledIf(
-    value = "sqlServerIsConfigured",
-    disabledReason =
-        "Set GRAVITINO_SQLSERVER_JDBC_URL with a databaseName, plus the username and password")
+@Tag("gravitino-docker-test")
 @TestInstance(Lifecycle.PER_CLASS)
 public class CatalogSqlServerIT extends BaseIT {
 
   private static final Logger LOG = LoggerFactory.getLogger(CatalogSqlServerIT.class);
 
+  private static final ContainerSuite containerSuite = ContainerSuite.getInstance();
+
   private static final String PROVIDER = "jdbc-sqlserver";
   private static final String DRIVER = "com.microsoft.sqlserver.jdbc.SQLServerDriver";
-
-  /**
-   * Reads the database a SQL Server URL binds to, which the catalog needs as {@code jdbc-database}.
-   */
-  private static final Pattern DATABASE_NAME = Pattern.compile("(?i);databaseName=([^;]+)");
 
   private static final String TABLE_COMMENT = "sqlserver_it_table_comment";
   private static final String UPDATED_TABLE_COMMENT = "sqlserver_it_updated_table_comment";
   private static final String SCHEMA_COMMENT = "sqlserver_it_schema_comment";
-
-  private static final String SQLSERVER_JDBC_URL = System.getenv("GRAVITINO_SQLSERVER_JDBC_URL");
-  private static final String SQLSERVER_USERNAME = System.getenv("GRAVITINO_SQLSERVER_USERNAME");
-  private static final String SQLSERVER_PASSWORD = System.getenv("GRAVITINO_SQLSERVER_PASSWORD");
-  private static final String SQLSERVER_DATABASE = extractDatabase(SQLSERVER_JDBC_URL);
 
   private final String metalakeName = GravitinoITUtils.genRandomName("sqlserver_it_metalake");
   private final String catalogName = GravitinoITUtils.genRandomName("sqlserver_it_catalog");
@@ -134,22 +109,26 @@ public class CatalogSqlServerIT extends BaseIT {
   private final String renamedTableName = GravitinoITUtils.genRandomName("sqlserver_it_renamed");
   private final String purgedTableName = GravitinoITUtils.genRandomName("sqlserver_it_purged");
 
+  /** The release the subclass under test runs against. */
+  protected SqlServerImageName sqlServerImageName = SqlServerContainer.DEFAULT_IMAGE;
+
+  /** A SQL Server connection is bound to one database, which is what the catalog maps to. */
+  protected final TestDatabaseName testDbName = TestDatabaseName.SQLSERVER_CATALOG_SQLSERVER_IT;
+
+  private SqlServerContainer sqlServerContainer;
   private GravitinoMetalake metalake;
   private Catalog catalog;
   private SqlServerService sqlServerService;
 
-  /** Reports whether the environment carries everything a SQL Server instance needs. */
-  protected static boolean sqlServerIsConfigured() {
-    return StringUtils.isNotBlank(SQLSERVER_JDBC_URL)
-        && StringUtils.isNotBlank(SQLSERVER_DATABASE)
-        && StringUtils.isNotBlank(SQLSERVER_USERNAME)
-        && StringUtils.isNotBlank(SQLSERVER_PASSWORD);
-  }
-
   @BeforeAll
   public void startup() throws IOException {
+    containerSuite.startSqlServerContainer(testDbName, sqlServerImageName);
+    sqlServerContainer = containerSuite.getSqlServerContainer(sqlServerImageName);
     sqlServerService =
-        new SqlServerService(SQLSERVER_JDBC_URL, SQLSERVER_USERNAME, SQLSERVER_PASSWORD);
+        new SqlServerService(
+            sqlServerContainer.getJdbcUrl(testDbName),
+            sqlServerContainer.getUsername(),
+            sqlServerContainer.getPassword());
     createMetalake();
     createCatalog();
     createSchema();
@@ -463,17 +442,6 @@ public class CatalogSqlServerIT extends BaseIT {
     Assertions.assertFalse(sqlServerService.tableExists(schemaName, purgedTableName));
   }
 
-  /**
-   * Returns the {@code databaseName} a SQL Server URL binds to, or {@code null} if it names none.
-   */
-  private static String extractDatabase(String url) {
-    if (StringUtils.isBlank(url)) {
-      return null;
-    }
-    Matcher matcher = DATABASE_NAME.matcher(url);
-    return matcher.find() ? matcher.group(1) : null;
-  }
-
   private static Set<String> fold(Set<String> names) {
     return names.stream().map(name -> name.toLowerCase(Locale.ROOT)).collect(Collectors.toSet());
   }
@@ -499,14 +467,13 @@ public class CatalogSqlServerIT extends BaseIT {
     catalog = loaded;
   }
 
-  /** A SQL Server connection is bound to one database, which is what the catalog maps to. */
   private Map<String, String> catalogProperties() {
     return ImmutableMap.of(
-        JdbcConfig.JDBC_URL.getKey(), SQLSERVER_JDBC_URL,
+        JdbcConfig.JDBC_URL.getKey(), sqlServerContainer.getJdbcUrl(testDbName),
         JdbcConfig.JDBC_DRIVER.getKey(), DRIVER,
-        JdbcConfig.JDBC_DATABASE.getKey(), SQLSERVER_DATABASE,
-        JdbcConfig.USERNAME.getKey(), SQLSERVER_USERNAME,
-        JdbcConfig.PASSWORD.getKey(), SQLSERVER_PASSWORD);
+        JdbcConfig.JDBC_DATABASE.getKey(), testDbName.toString(),
+        JdbcConfig.USERNAME.getKey(), sqlServerContainer.getUsername(),
+        JdbcConfig.PASSWORD.getKey(), sqlServerContainer.getPassword());
   }
 
   private void createSchema() {

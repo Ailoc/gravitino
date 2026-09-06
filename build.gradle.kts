@@ -282,6 +282,7 @@ allprojects {
       val dockerTest = project.rootProject.extra["dockerTest"] as? Boolean ?: false
       param.environment("dockerTest", dockerTest.toString())
       val dorisMultiVersion = project.hasProperty("dorisMultiVersionTest")
+      val sqlServerMultiVersion = project.hasProperty("sqlServerMultiVersionTest")
       param.useJUnitPlatform {
         if (!dockerTest) {
           excludeTags("gravitino-docker-test")
@@ -291,6 +292,13 @@ allprojects {
           // CI runs only the default 1.2.x suite; run all versions locally with
           // -PdorisMultiVersionTest.
           excludeTags("doris-multi-version")
+        }
+        if (!sqlServerMultiVersion) {
+          // Each SQL Server container reserves about 2 GB and every release started stays
+          // alive for the lifetime of the test JVM, so the matrix does not fit one CI runner.
+          // CI runs only the default release; run all versions locally with
+          // -PsqlServerMultiVersionTest.
+          excludeTags("sqlserver-multi-version")
         }
       }
     }

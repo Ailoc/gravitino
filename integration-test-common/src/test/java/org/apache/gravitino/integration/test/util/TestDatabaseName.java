@@ -135,6 +135,9 @@ public enum TestDatabaseName {
 
   PG_ICEBERG_ASYNC_CLEANUP_IT,
 
+  /** Represents the SQL Server database for CatalogSqlServerIT and its version subclasses. */
+  SQLSERVER_CATALOG_SQLSERVER_IT,
+
   CLICKHOUSE_CLICKHOUSE_ABSTRACT_IT,
   CLICKHOUSE_CATALOG_CLICKHOUSE_IT,
   CLICKHOUSE_AUDIT_CATALOG_CLICKHOUSE_IT,

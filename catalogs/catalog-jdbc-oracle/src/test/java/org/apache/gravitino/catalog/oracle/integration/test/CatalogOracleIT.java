@@ -41,6 +41,8 @@ import org.apache.gravitino.catalog.oracle.integration.test.service.OracleServic
 import org.apache.gravitino.client.GravitinoMetalake;
 import org.apache.gravitino.exceptions.NoSuchSchemaException;
 import org.apache.gravitino.exceptions.SchemaAlreadyExistsException;
+import org.apache.gravitino.integration.test.container.ContainerSuite;
+import org.apache.gravitino.integration.test.container.OracleContainer;
 import org.apache.gravitino.integration.test.util.BaseIT;
 import org.apache.gravitino.integration.test.util.GravitinoITUtils;
 import org.apache.gravitino.rel.Column;
@@ -60,54 +62,36 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.TestInstance.Lifecycle;
-import org.junit.jupiter.api.condition.EnabledIf;
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
-import org.junit.platform.commons.util.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
  * Integration test for the Oracle JDBC catalog.
  *
- * <p>Oracle publishes no image that can be started anonymously, so these tests run against an
- * Oracle instance you provide rather than one they start. Set the following environment variables
- * to enable them:
- *
- * <ul>
- *   <li>{@code GRAVITINO_TEST_CLOUD_IT} - must be {@code true}
- *   <li>{@code GRAVITINO_ORACLE_JDBC_URL} - for example {@code
- *       jdbc:oracle:thin:@//host:1521/FREEPDB1}
- *   <li>{@code GRAVITINO_ORACLE_USERNAME} - an account holding {@code CREATE USER} and {@code DROP
- *       USER}, since a Gravitino schema is an Oracle user
- *   <li>{@code GRAVITINO_ORACLE_PASSWORD}
- * </ul>
- *
- * <p>Run them with {@code ./gradlew :catalogs:catalog-jdbc-oracle:test -PskipTests}, exporting the
- * variables in the same shell. The Gradle daemon captures the environment when it starts, so pass
- * {@code --no-daemon} or stop a running daemon first.
+ * <p>These tests start their own Oracle Database Free container, so they need Docker and run only
+ * under {@code -PskipDockerTests=false}. The image is several gigabytes and spends a few minutes
+ * opening its pluggable database, which makes this the slowest of the JDBC catalog tests.
  *
  * <p>Each test drives the catalog through the REST client and then reads Oracle's data dictionary
  * directly, so a statement the catalog failed to issue is caught rather than echoed back.
  */
-@EnabledIfEnvironmentVariable(named = "GRAVITINO_TEST_CLOUD_IT", matches = "true")
-@EnabledIf(value = "oracleIsConfigured", disabledReason = "Oracle is not configured")
+@Tag("gravitino-docker-test")
 @TestInstance(Lifecycle.PER_CLASS)
 public class CatalogOracleIT extends BaseIT {
 
   private static final Logger LOG = LoggerFactory.getLogger(CatalogOracleIT.class);
+
+  private static final ContainerSuite containerSuite = ContainerSuite.getInstance();
 
   private static final String PROVIDER = "jdbc-oracle";
   private static final String DRIVER = "oracle.jdbc.OracleDriver";
 
   private static final String TABLE_COMMENT = "oracle_it_table_comment";
   private static final String UPDATED_TABLE_COMMENT = "oracle_it_updated_table_comment";
-
-  private static final String ORACLE_JDBC_URL = System.getenv("GRAVITINO_ORACLE_JDBC_URL");
-  private static final String ORACLE_USERNAME = System.getenv("GRAVITINO_ORACLE_USERNAME");
-  private static final String ORACLE_PASSWORD = System.getenv("GRAVITINO_ORACLE_PASSWORD");
 
   private final String metalakeName = GravitinoITUtils.genRandomName("oracle_it_metalake");
   private final String catalogName = GravitinoITUtils.genRandomName("oracle_it_catalog");
@@ -118,20 +102,20 @@ public class CatalogOracleIT extends BaseIT {
   private final String renamedTableName = oracleName("oracle_it_renamed");
   private final String purgedTableName = oracleName("oracle_it_purged");
 
+  private OracleContainer oracleContainer;
   private GravitinoMetalake metalake;
   private Catalog catalog;
   private OracleService oracleService;
 
-  /** Reports whether the environment carries everything an Oracle instance needs. */
-  protected static boolean oracleIsConfigured() {
-    return StringUtils.isNotBlank(ORACLE_JDBC_URL)
-        && StringUtils.isNotBlank(ORACLE_USERNAME)
-        && StringUtils.isNotBlank(ORACLE_PASSWORD);
-  }
-
   @BeforeAll
   public void startup() throws IOException {
-    oracleService = new OracleService(ORACLE_JDBC_URL, ORACLE_USERNAME, ORACLE_PASSWORD);
+    containerSuite.startOracleContainer();
+    oracleContainer = containerSuite.getOracleContainer();
+    oracleService =
+        new OracleService(
+            oracleContainer.getJdbcUrl(),
+            oracleContainer.getUsername(),
+            oracleContainer.getPassword());
     createMetalake();
     createCatalog();
     createSchema();
@@ -468,10 +452,10 @@ public class CatalogOracleIT extends BaseIT {
   /** Oracle has no catalog level above the schema, so {@code jdbc-database} is left unset. */
   private Map<String, String> catalogProperties() {
     return ImmutableMap.of(
-        JdbcConfig.JDBC_URL.getKey(), ORACLE_JDBC_URL,
+        JdbcConfig.JDBC_URL.getKey(), oracleContainer.getJdbcUrl(),
         JdbcConfig.JDBC_DRIVER.getKey(), DRIVER,
-        JdbcConfig.USERNAME.getKey(), ORACLE_USERNAME,
-        JdbcConfig.PASSWORD.getKey(), ORACLE_PASSWORD);
+        JdbcConfig.USERNAME.getKey(), oracleContainer.getUsername(),
+        JdbcConfig.PASSWORD.getKey(), oracleContainer.getPassword());
   }
 
   private void createSchema() {
