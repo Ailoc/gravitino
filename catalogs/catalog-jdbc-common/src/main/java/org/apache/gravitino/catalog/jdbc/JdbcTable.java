@@ -115,6 +115,9 @@ public class JdbcTable extends BaseTable {
       return properties;
     }
 
+    /**
+     * @return The columns currently set on this builder.
+     */
     public Column[] columns() {
       return columns;
     }
