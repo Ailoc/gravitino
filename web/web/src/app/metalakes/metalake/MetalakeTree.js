@@ -69,6 +69,10 @@ const MetalakeTree = props => {
             return 'devicon:mysql-wordmark'
           case 'jdbc-postgresql':
             return 'devicon:postgresql-wordmark'
+          case 'jdbc-oracle':
+            return 'devicon:oracle'
+          case 'jdbc-sqlserver':
+            return 'simple-icons:microsoftsqlserver'
           case 'jdbc-doris':
             return 'custom-icons-doris'
           case 'jdbc-starrocks':
@@ -81,6 +85,8 @@ const MetalakeTree = props => {
             return 'material-symbols:houseboat-outline'
           case 'jdbc-oceanbase':
             return 'custom-icons-oceanbase'
+          case 'mongodb':
+            return 'devicon:mongodb-wordmark'
           default:
             return 'bx:book'
         }

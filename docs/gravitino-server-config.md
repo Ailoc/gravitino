@@ -596,6 +596,7 @@ classpath automatically, which is also where provider-specific files such as `hd
 | `kafka`             | [Kafka catalog properties](kafka-catalog.md#catalog-properties)                         | `catalogs/kafka/conf/kafka.conf`                         |
 | `fileset`           | [Fileset catalog properties](fileset-catalog.md#catalog-properties)                     | `catalogs/fileset/conf/fileset.conf`                     |
 | `model`             | [Model catalog properties](model-catalog.md#catalog-properties)                         | `catalogs/model/conf/model.conf`                         |
+| `mongodb`           | [MongoDB catalog properties](mongodb-catalog.md#catalog-properties)                     | `catalogs/mongodb/conf/mongodb.conf`                     |
 
 ‡ Contributed catalogs, shipped only in the `-all` distribution package. The standard package
 does not contain their directories.

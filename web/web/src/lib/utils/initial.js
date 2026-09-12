@@ -437,6 +437,18 @@ export const providers = [
         required: true
       }
     ]
+  },
+  {
+    label: 'MongoDB',
+    value: 'mongodb',
+    defaultProps: [
+      {
+        key: 'mongodb.uri',
+        value: '',
+        required: true,
+        description: 'e.g. mongodb://localhost:27017'
+      }
+    ]
   }
 ]
 
@@ -746,6 +758,17 @@ const relationalColumnTypeMap = {
     'timestamp_tz',
     'uuid',
     'varchar'
+  ],
+  mongodb: [
+    'binary',
+    'boolean',
+    'date',
+    'decimal',
+    'double',
+    'integer',
+    'long',
+    'string',
+    'timestamp'
   ]
 }
 
@@ -810,6 +833,12 @@ const relationalTablePropInfoMap = {
     allowAdd: false
   },
   'jdbc-sqlserver': {
+    reserved: [],
+    immutable: [],
+    allowDelete: false,
+    allowAdd: false
+  },
+  mongodb: {
     reserved: [],
     immutable: [],
     allowDelete: false,

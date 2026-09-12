@@ -29,6 +29,10 @@ export const checkCatalogIcon = ({ type, provider }) => {
           return 'devicon:mysql-wordmark'
         case 'jdbc-postgresql':
           return 'devicon:postgresql-wordmark'
+        case 'jdbc-oracle':
+          return 'devicon:oracle'
+        case 'jdbc-sqlserver':
+          return 'simple-icons:microsoftsqlserver'
         case 'jdbc-doris':
           return 'custom-icons-doris'
         case 'lakehouse-paimon':
@@ -39,6 +43,8 @@ export const checkCatalogIcon = ({ type, provider }) => {
           return 'custom-icons-hologres'
         case 'jdbc-oceanbase':
           return 'custom-icons-oceanbase'
+        case 'mongodb':
+          return 'devicon:mongodb-wordmark'
         case 'jdbc-starrocks':
           return 'custom-icons-starrocks'
         case 'lakehouse-generic':
@@ -929,6 +935,18 @@ export const providerBase = {
       }
     ]
   },
+  mongodb: {
+    label: 'MongoDB',
+    defaultProps: [
+      {
+        label: 'MongoDB URI',
+        key: 'mongodb.uri',
+        value: '',
+        required: true,
+        description: 'e.g. mongodb://localhost:27017'
+      }
+    ]
+  },
   model: {
     label: 'Model',
     defaultProps: []
@@ -1026,5 +1044,10 @@ export const relationalProviders = [
     label: 'StarRocks',
     value: 'jdbc-starrocks',
     description: 'An open source, high performance analytical database'
+  },
+  {
+    label: 'MongoDB',
+    value: 'mongodb',
+    description: 'A document-oriented NoSQL database'
   }
 ]

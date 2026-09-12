@@ -102,6 +102,7 @@ mysql = "8.0.33"
 postgresql = "42.7.11"
 oracle = "23.26.3.0.0"
 mssql = "13.4.0.jre11"
+mongodb = "5.3.1"
 immutables-value = "2.11.7"
 selenium = "4.33.0"
 rauschig = "1.2.0"
@@ -300,6 +301,7 @@ testcontainers-mysql = { group = "org.testcontainers", name = "mysql", version.r
 testcontainers-postgresql = { group = "org.testcontainers", name = "postgresql", version.ref = "testcontainers" }
 testcontainers-junit-jupiter = { group = "org.testcontainers", name = "junit-jupiter", version.ref = "testcontainers" }
 testcontainers-localstack = { group = "org.testcontainers", name = "localstack", version.ref = "testcontainers" }
+testcontainers-mongodb = { group = "org.testcontainers", name = "mongodb", version.ref = "testcontainers" }
 trino-jdbc = { group = "io.trino", name = "trino-jdbc", version.ref = "trino" }
 jwt-api = { group = "io.jsonwebtoken", name = "jjwt-api", version.ref = "jwt"}
 jwt-impl = { group = "io.jsonwebtoken", name = "jjwt-impl", version.ref = "jwt"}
@@ -324,6 +326,7 @@ mysql-driver = { group = "mysql", name = "mysql-connector-java", version.ref = "
 postgresql-driver = { group = "org.postgresql", name = "postgresql", version.ref = "postgresql" }
 oracle-driver = { group = "com.oracle.database.jdbc", name = "ojdbc11", version.ref = "oracle" }
 mssql-driver = { group = "com.microsoft.sqlserver", name = "mssql-jdbc", version.ref = "mssql" }
+mongodb-driver = { group = "org.mongodb", name = "mongodb-driver-sync", version.ref = "mongodb" }
 minikdc = { group = "org.apache.hadoop", name = "hadoop-minikdc", version.ref = "hadoop-minikdc"}
 immutables-value = { module = "org.immutables:value", version.ref = "immutables-value" }
 commons-cli = { group = "commons-cli", name = "commons-cli", version.ref = "commons-cli" }

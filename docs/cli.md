@@ -66,7 +66,7 @@ The general structure for running commands with the Gravitino CLI is `gcli.sh en
  -V,--value <arg>        property value
  -x,--index              display index information
  -z,--provider <arg>     provider one of hadoop, hive, mysql, postgres,
-                         iceberg, kafka, oracle, sqlserver
+                         iceberg, kafka, oracle, sqlserver, mongodb
  ```
 
 ## Commands
@@ -385,6 +385,12 @@ gcli.sh catalog create --name oracle --provider oracle --properties jdbc-url=jdb
 
 ```bash
 gcli.sh catalog create --name sqlserver --provider sqlserver --properties jdbc-url=jdbc:sqlserver://localhost:1433;databaseName=db,jdbc-database=db,jdbc-driver=com.microsoft.sqlserver.jdbc.SQLServerDriver,jdbc-user=admin,jdbc-password=password
+```
+
+##### Create a MongoDB catalog
+
+```bash
+gcli.sh catalog create --name mongodb --provider mongodb --properties mongodb.uri=mongodb://localhost:27017
 ```
 
 #### Delete a Catalog

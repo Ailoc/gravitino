@@ -51,6 +51,8 @@ public class Providers {
   public static final String ORACLE = "oracle";
   /** Represents the SQL Server provider. */
   public static final String SQLSERVER = "sqlserver";
+  /** Represents the MongoDB provider. */
+  public static final String MONGODB = "mongodb";
   /** Represents the Model provider. */
   public static final String MODEL = "model";
 
@@ -69,6 +71,7 @@ public class Providers {
     VALID_PROVIDERS.add(OCEANBASE);
     VALID_PROVIDERS.add(ORACLE);
     VALID_PROVIDERS.add(SQLSERVER);
+    VALID_PROVIDERS.add(MONGODB);
     VALID_PROVIDERS.add(MODEL);
   }
 
@@ -114,6 +117,8 @@ public class Providers {
         return "jdbc-oracle";
       case SQLSERVER:
         return "jdbc-sqlserver";
+      case MONGODB:
+        return "mongodb";
       case MODEL:
         return "model";
       default:
@@ -141,6 +146,7 @@ public class Providers {
       case OCEANBASE:
       case ORACLE:
       case SQLSERVER:
+      case MONGODB:
         return Catalog.Type.RELATIONAL;
       case KAFKA:
         return Catalog.Type.MESSAGING;

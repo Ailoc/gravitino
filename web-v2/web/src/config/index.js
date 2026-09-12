@@ -170,6 +170,23 @@ export const UnsupportColumnType = {
     'union',
     'time',
     'timestamp_tz'
+  ],
+  mongodb: [
+    'char',
+    'varchar',
+    'fixed',
+    'byte',
+    'short',
+    'float',
+    'time',
+    'timestamp_tz',
+    'interval_day',
+    'interval_year',
+    'uuid',
+    'union',
+    'struct',
+    'list',
+    'map'
   ]
 }
 
@@ -219,6 +236,11 @@ const tableLevelPropInfoMap = {
     allowAdd: false
   },
   'jdbc-sqlserver': {
+    reserved: [],
+    immutable: [],
+    allowAdd: false
+  },
+  mongodb: {
     reserved: [],
     immutable: [],
     allowAdd: false

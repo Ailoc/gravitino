@@ -33,6 +33,7 @@ import org.apache.gravitino.trino.connector.catalog.jdbc.postgresql.PostgreSQLCo
 import org.apache.gravitino.trino.connector.catalog.jdbc.sqlserver.SqlServerConnectorAdapter;
 import org.apache.gravitino.trino.connector.catalog.jdbc.trino.TrinoClusterConnectorAdapter;
 import org.apache.gravitino.trino.connector.catalog.memory.MemoryConnectorAdapter;
+import org.apache.gravitino.trino.connector.catalog.mongodb.MongodbConnectorAdapter;
 import org.apache.gravitino.trino.connector.metadata.GravitinoCatalog;
 
 /** This class use to create CatalogConnectorContext instance by given catalog. */
@@ -43,6 +44,7 @@ public class DefaultCatalogConnectorFactory implements CatalogConnectorFactory {
   private static final String HIVE_CONNECTOR_PROVIDER_NAME = "hive";
   private static final String ICEBERG_CONNECTOR_PROVIDER_NAME = "lakehouse-iceberg";
   private static final String MEMORY_CONNECTOR_PROVIDER_NAME = "memory";
+  private static final String MONGODB_CONNECTOR_PROVIDER_NAME = "mongodb";
   private static final String MYSQL_CONNECTOR_PROVIDER_NAME = "jdbc-mysql";
   private static final String ORACLE_CONNECTOR_PROVIDER_NAME = "jdbc-oracle";
   private static final String POSTGRESQL_CONNECTOR_PROVIDER_NAME = "jdbc-postgresql";
@@ -76,6 +78,9 @@ public class DefaultCatalogConnectorFactory implements CatalogConnectorFactory {
     catalogBuilders.put(
         ICEBERG_CONNECTOR_PROVIDER_NAME,
         new CatalogConnectorContext.Builder(new IcebergConnectorAdapter(config)));
+    catalogBuilders.put(
+        MONGODB_CONNECTOR_PROVIDER_NAME,
+        new CatalogConnectorContext.Builder(new MongodbConnectorAdapter()));
     catalogBuilders.put(
         MYSQL_CONNECTOR_PROVIDER_NAME,
         new CatalogConnectorContext.Builder(new MySQLConnectorAdapter()));

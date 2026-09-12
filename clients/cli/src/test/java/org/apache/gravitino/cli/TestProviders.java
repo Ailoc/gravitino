@@ -46,6 +46,7 @@ public class TestProviders {
     assertTrue(Providers.isValidProvider(Providers.ORACLE), "ORACLE should be a valid entity");
     assertTrue(
         Providers.isValidProvider(Providers.SQLSERVER), "SQLSERVER should be a valid entity");
+    assertTrue(Providers.isValidProvider(Providers.MONGODB), "MONGODB should be a valid entity");
     assertTrue(Providers.isValidProvider(Providers.MODEL), "MODEL should be a valid entity");
   }
 
@@ -87,6 +88,7 @@ public class TestProviders {
     assertNotNull(Providers.internal(Providers.OCEANBASE), "Internal string should not be null");
     assertNotNull(Providers.internal(Providers.ORACLE), "Internal string should not be null");
     assertNotNull(Providers.internal(Providers.SQLSERVER), "Internal string should not be null");
+    assertNotNull(Providers.internal(Providers.MONGODB), "Internal string should not be null");
     assertNotNull(Providers.internal(Providers.MODEL), "Internal string should not be null");
   }
 
@@ -112,6 +114,7 @@ public class TestProviders {
     assertNotNull(Providers.catalogType(Providers.OCEANBASE), "Catalog type should not be null");
     assertNotNull(Providers.catalogType(Providers.ORACLE), "Catalog type should not be null");
     assertNotNull(Providers.catalogType(Providers.SQLSERVER), "Catalog type should not be null");
+    assertNotNull(Providers.catalogType(Providers.MONGODB), "Catalog type should not be null");
     assertNotNull(Providers.catalogType(Providers.MODEL), "Catalog type should not be null");
   }
 
@@ -145,5 +148,11 @@ public class TestProviders {
     assertEquals("jdbc-sqlserver", Providers.internal(Providers.SQLSERVER));
     assertEquals(Catalog.Type.RELATIONAL, Providers.catalogType(Providers.ORACLE));
     assertEquals(Catalog.Type.RELATIONAL, Providers.catalogType(Providers.SQLSERVER));
+  }
+
+  @Test
+  public void mongodbProvider() {
+    assertEquals("mongodb", Providers.internal(Providers.MONGODB));
+    assertEquals(Catalog.Type.RELATIONAL, Providers.catalogType(Providers.MONGODB));
   }
 }

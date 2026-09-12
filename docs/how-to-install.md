@@ -47,6 +47,7 @@ The Gravitino binary distribution package contains the following files:
     |   └── lakehouse-iceberg/                  # Apache Iceberg catalog dependencies and configurations.
     |   └── lakehouse-paimon/                   # Apache Paimon catalog dependencies and configurations.
     |   └── model/                              # Model catalog dependencies and configurations.
+    |   └── mongodb/                            # MongoDB catalog dependencies and configurations.
     |── conf/                                   # All configurations for Gravitino.
     |   ├── gravitino.conf                      # Gravitino server and Gravitino Iceberg REST server configuration.
     |   ├── gravitino-iceberg-rest-server.conf  # Gravitino server configuration.

@@ -22,7 +22,8 @@ by provider, and each catalog type documents its own: [Apache Hive](./apache-hiv
 [Oracle](./jdbc-oracle-catalog.md), [SQL Server](./jdbc-sqlserver-catalog.md), [Apache
 Doris](./jdbc-doris-catalog.md), [StarRocks](./jdbc-starrocks-catalog.md),
 [OceanBase](./jdbc-oceanbase-catalog.md), [Hologres](./jdbc-hologres-catalog.md),
-[ClickHouse](./jdbc-clickhouse-catalog.md), [Apache Iceberg](./lakehouse-iceberg-catalog.md),
+[ClickHouse](./jdbc-clickhouse-catalog.md), [MongoDB](./mongodb-catalog.md),
+[Apache Iceberg](./lakehouse-iceberg-catalog.md),
 [Apache Paimon](./lakehouse-paimon-catalog.md), [Apache Hudi](./lakehouse-hudi-catalog.md), and
 [Lakehouse generic](./lakehouse-generic-catalog.md).
 

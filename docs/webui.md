@@ -166,7 +166,7 @@ Creating a catalog requires these fields:
 1. **Catalog name**(**_required_**): the name of the catalog
 2. **Type**(**_required_**): `relational`/`fileset`/`messaging`/`model`, the default value is `relational`
 3. **Provider**(**_required_**):
-    1. Type `relational` - `hive`/`iceberg`/`mysql`/`oracle`/`postgresql`/`sqlserver`/`doris`/`paimon`/`hudi`/`oceanbase`/`hologres`
+    1. Type `relational` - `hive`/`iceberg`/`mysql`/`oracle`/`postgresql`/`sqlserver`/`doris`/`paimon`/`hudi`/`oceanbase`/`hologres`/`mongodb`
     2. Type `fileset` has no provider
     3. Type `messaging` - `kafka`
     4. Type `model` has no provider
@@ -283,6 +283,14 @@ Creating a catalog requires these fields:
     |jdbc-user    |The JDBC user name                                                   |
     |jdbc-password|The JDBC password                                                    |
     |jdbc-database|e.g. `your_database`                                                 |
+
+  </TabItem>
+  <TabItem value='mongodb' label='MongoDB'>
+    Follow the [MongoDB catalog](./mongodb-catalog.md) document.
+
+    |Key        |Description                                                                              |
+    |-----------|-----------------------------------------------------------------------------------------|
+    |mongodb.uri|MongoDB connection URI. e.g. `mongodb://localhost:27017` or `mongodb://user:pass@host:27017`|
 
   </TabItem>
   <TabItem value='doris' label='Doris'>
