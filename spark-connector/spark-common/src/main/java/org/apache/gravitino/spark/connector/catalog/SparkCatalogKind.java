@@ -41,13 +41,19 @@ public enum SparkCatalogKind {
   LAKEHOUSE_PAIMON,
   /** AWS Glue catalogs, provider {@code glue}. */
   GLUE,
-  /** Every {@code jdbc-*} catalog except PostgreSQL, which has its own kind. */
+  /** Every {@code jdbc-*} catalog except PostgreSQL, Oracle, and SQL Server, which have their own kinds. */
   JDBC,
+  /** Oracle catalogs, provider {@code jdbc-oracle}. */
+  JDBC_ORACLE,
   /** PostgreSQL catalogs, provider {@code jdbc-postgresql}. */
-  JDBC_POSTGRESQL;
+  JDBC_POSTGRESQL,
+  /** SQL Server catalogs, provider {@code jdbc-sqlserver}. */
+  JDBC_SQLSERVER;
 
   private static final String JDBC_PROVIDER_PREFIX = "jdbc";
+  private static final String ORACLE_PROVIDER_PREFIX = "jdbc-oracle";
   private static final String POSTGRESQL_PROVIDER_PREFIX = "jdbc-postgresql";
+  private static final String SQLSERVER_PROVIDER_PREFIX = "jdbc-sqlserver";
 
   private static final Map<String, SparkCatalogKind> KINDS_BY_PROVIDER =
       ImmutableMap.of(
@@ -73,10 +79,19 @@ public enum SparkCatalogKind {
   public static SparkCatalogKind fromProvider(String provider) {
     Objects.requireNonNull(provider, "Catalog provider must not be null");
     String normalized = provider.toLowerCase(Locale.ROOT);
-    // All JDBC backends share one Spark catalog, apart from PostgreSQL, whose type and property
-    // conversions differ.
+    // PostgreSQL, Oracle, and SQL Server each have their own Spark catalog kind because their
+    // type and property conversions differ from the generic JDBC path.
     if (normalized.startsWith(JDBC_PROVIDER_PREFIX)) {
-      return normalized.startsWith(POSTGRESQL_PROVIDER_PREFIX) ? JDBC_POSTGRESQL : JDBC;
+      if (normalized.startsWith(POSTGRESQL_PROVIDER_PREFIX)) {
+        return JDBC_POSTGRESQL;
+      }
+      if (normalized.startsWith(ORACLE_PROVIDER_PREFIX)) {
+        return JDBC_ORACLE;
+      }
+      if (normalized.startsWith(SQLSERVER_PROVIDER_PREFIX)) {
+        return JDBC_SQLSERVER;
+      }
+      return JDBC;
     }
     return KINDS_BY_PROVIDER.get(normalized);
   }

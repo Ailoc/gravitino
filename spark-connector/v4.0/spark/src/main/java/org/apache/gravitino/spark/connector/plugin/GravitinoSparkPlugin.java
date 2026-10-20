@@ -25,7 +25,9 @@ import org.apache.gravitino.spark.connector.glue.GravitinoGlueCatalogSpark40;
 import org.apache.gravitino.spark.connector.hive.GravitinoHiveCatalogSpark40;
 import org.apache.gravitino.spark.connector.iceberg.GravitinoIcebergCatalogSpark40;
 import org.apache.gravitino.spark.connector.jdbc.GravitinoJdbcCatalogSpark40;
+import org.apache.gravitino.spark.connector.jdbc.oracle.GravitinoOracleCatalogSpark40;
 import org.apache.gravitino.spark.connector.jdbc.postgresql.GravitinoPostgreSqlCatalogSpark40;
+import org.apache.gravitino.spark.connector.jdbc.sqlserver.GravitinoSqlServerCatalogSpark40;
 import org.apache.spark.api.plugin.DriverPlugin;
 import org.apache.spark.api.plugin.ExecutorPlugin;
 import org.apache.spark.api.plugin.SparkPlugin;
@@ -61,6 +63,8 @@ public class GravitinoSparkPlugin implements SparkPlugin {
         .catalog(SparkCatalogKind.GLUE, GravitinoGlueCatalogSpark40.class)
         .catalog(SparkCatalogKind.JDBC, GravitinoJdbcCatalogSpark40.class)
         .catalog(SparkCatalogKind.JDBC_POSTGRESQL, GravitinoPostgreSqlCatalogSpark40.class)
+        .catalog(SparkCatalogKind.JDBC_ORACLE, GravitinoOracleCatalogSpark40.class)
+        .catalog(SparkCatalogKind.JDBC_SQLSERVER, GravitinoSqlServerCatalogSpark40.class)
         .build();
   }
 }

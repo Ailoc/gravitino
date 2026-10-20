@@ -58,6 +58,8 @@ public class TestGravitinoDriverPlugin {
   private static final String GLUE_CATALOG = "org.example.GlueCatalog";
   private static final String JDBC_CATALOG = "org.example.JdbcCatalog";
   private static final String POSTGRESQL_CATALOG = "org.example.PostgreSqlCatalog";
+  private static final String ORACLE_CATALOG = "org.example.OracleCatalog";
+  private static final String SQLSERVER_CATALOG = "org.example.SqlServerCatalog";
 
   @Test
   void testIcebergExtensionName() {
@@ -145,6 +147,8 @@ public class TestGravitinoDriverPlugin {
     assertEquals(PAIMON_CATALOG, classFor(plugin, "lakehouse-paimon"));
     assertEquals(GLUE_CATALOG, classFor(plugin, "glue"));
     assertEquals(POSTGRESQL_CATALOG, classFor(plugin, "jdbc-postgresql"));
+    assertEquals(ORACLE_CATALOG, classFor(plugin, "jdbc-oracle"));
+    assertEquals(SQLSERVER_CATALOG, classFor(plugin, "jdbc-sqlserver"));
     // Every other JDBC backend shares one catalog.
     assertEquals(JDBC_CATALOG, classFor(plugin, "jdbc-mysql"));
     assertEquals(JDBC_CATALOG, classFor(plugin, "jdbc-doris"));
@@ -306,7 +310,9 @@ public class TestGravitinoDriverPlugin {
         .catalog(SparkCatalogKind.LAKEHOUSE_ICEBERG, ICEBERG_CATALOG)
         .catalog(SparkCatalogKind.GLUE, GLUE_CATALOG)
         .catalog(SparkCatalogKind.JDBC, JDBC_CATALOG)
-        .catalog(SparkCatalogKind.JDBC_POSTGRESQL, POSTGRESQL_CATALOG);
+        .catalog(SparkCatalogKind.JDBC_POSTGRESQL, POSTGRESQL_CATALOG)
+        .catalog(SparkCatalogKind.JDBC_ORACLE, ORACLE_CATALOG)
+        .catalog(SparkCatalogKind.JDBC_SQLSERVER, SQLSERVER_CATALOG);
   }
 
   @Test

@@ -26,7 +26,9 @@ import org.apache.gravitino.spark.connector.glue.GravitinoGlueCatalogSpark35;
 import org.apache.gravitino.spark.connector.hive.GravitinoHiveCatalogSpark35;
 import org.apache.gravitino.spark.connector.iceberg.GravitinoIcebergCatalogSpark35;
 import org.apache.gravitino.spark.connector.jdbc.GravitinoJdbcCatalogSpark35;
+import org.apache.gravitino.spark.connector.jdbc.oracle.GravitinoOracleCatalogSpark35;
 import org.apache.gravitino.spark.connector.jdbc.postgresql.GravitinoPostgreSqlCatalogSpark35;
+import org.apache.gravitino.spark.connector.jdbc.sqlserver.GravitinoSqlServerCatalogSpark35;
 import org.apache.spark.api.plugin.DriverPlugin;
 import org.apache.spark.api.plugin.ExecutorPlugin;
 import org.apache.spark.api.plugin.SparkPlugin;
@@ -73,7 +75,9 @@ public class GravitinoSparkPlugin implements SparkPlugin {
             .catalog(SparkCatalogKind.LAKEHOUSE_ICEBERG, GravitinoIcebergCatalogSpark35.class)
             .catalog(SparkCatalogKind.GLUE, GravitinoGlueCatalogSpark35.class)
             .catalog(SparkCatalogKind.JDBC, GravitinoJdbcCatalogSpark35.class)
-            .catalog(SparkCatalogKind.JDBC_POSTGRESQL, GravitinoPostgreSqlCatalogSpark35.class);
+            .catalog(SparkCatalogKind.JDBC_POSTGRESQL, GravitinoPostgreSqlCatalogSpark35.class)
+            .catalog(SparkCatalogKind.JDBC_ORACLE, GravitinoOracleCatalogSpark35.class)
+            .catalog(SparkCatalogKind.JDBC_SQLSERVER, GravitinoSqlServerCatalogSpark35.class);
     if (isPresent(PAIMON_CATALOG)) {
       builder.catalog(SparkCatalogKind.LAKEHOUSE_PAIMON, PAIMON_CATALOG);
     }

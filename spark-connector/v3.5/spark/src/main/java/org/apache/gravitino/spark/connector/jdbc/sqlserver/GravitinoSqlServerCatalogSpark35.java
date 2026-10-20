@@ -22,6 +22,7 @@ import org.apache.gravitino.spark.connector.PropertiesConverter;
 import org.apache.gravitino.spark.connector.jdbc.GravitinoJdbcCatalog;
 import org.apache.gravitino.spark.connector.jdbc.JdbcPropertiesConverter;
 
+/** Spark 3.5 specific Gravitino SQL Server catalog implementation. */
 public class GravitinoSqlServerCatalogSpark35 extends GravitinoJdbcCatalog {
   @Override
   protected PropertiesConverter getPropertiesConverter() {
