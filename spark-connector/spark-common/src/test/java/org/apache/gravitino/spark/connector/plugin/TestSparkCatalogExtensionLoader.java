@@ -50,7 +50,7 @@ public class TestSparkCatalogExtensionLoader {
 
     Assertions.assertFalse(
         bindings.catalogClassNames().containsKey(SparkCatalogKind.LAKEHOUSE_PAIMON));
-    Assertions.assertEquals(5, bindings.catalogClassNames().size());
+    Assertions.assertEquals(7, bindings.catalogClassNames().size());
   }
 
   @Test
@@ -81,7 +81,7 @@ public class TestSparkCatalogExtensionLoader {
 
     Assertions.assertFalse(
         bindings.catalogClassNames().containsKey(SparkCatalogKind.LAKEHOUSE_PAIMON));
-    Assertions.assertEquals(5, bindings.catalogClassNames().size());
+    Assertions.assertEquals(7, bindings.catalogClassNames().size());
   }
 
   private static SparkBindings buildWithExtensions(List<SparkCatalogExtension> extensions) {
@@ -92,7 +92,9 @@ public class TestSparkCatalogExtensionLoader {
             .catalog(SparkCatalogKind.LAKEHOUSE_ICEBERG, "org.example.IcebergCatalog")
             .catalog(SparkCatalogKind.GLUE, "org.example.GlueCatalog")
             .catalog(SparkCatalogKind.JDBC, "org.example.JdbcCatalog")
-            .catalog(SparkCatalogKind.JDBC_POSTGRESQL, "org.example.PostgreSqlCatalog");
+            .catalog(SparkCatalogKind.JDBC_POSTGRESQL, "org.example.PostgreSqlCatalog")
+            .catalog(SparkCatalogKind.JDBC_ORACLE, "org.example.OracleCatalog")
+            .catalog(SparkCatalogKind.JDBC_SQLSERVER, "org.example.SqlServerCatalog");
     SparkCatalogExtensionLoader.registerDiscoveredCatalogs(builder, extensions.iterator());
     return builder.build();
   }

@@ -41,7 +41,10 @@ public enum SparkCatalogKind {
   LAKEHOUSE_PAIMON,
   /** AWS Glue catalogs, provider {@code glue}. */
   GLUE,
-  /** Every {@code jdbc-*} catalog except PostgreSQL, Oracle, and SQL Server, which have their own kinds. */
+  /**
+   * Every {@code jdbc-*} catalog except PostgreSQL, Oracle, and SQL Server, which have their own
+   * kinds.
+   */
   JDBC,
   /** Oracle catalogs, provider {@code jdbc-oracle}. */
   JDBC_ORACLE,

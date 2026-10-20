@@ -149,12 +149,23 @@ public class ConnectionCountingDataSource {
   }
 
   private Statement statement() {
+    AtomicBoolean moreResults = new AtomicBoolean();
     return (Statement)
         Proxy.newProxyInstance(
             Statement.class.getClassLoader(),
             new Class<?>[] {Statement.class},
             (proxy, method, args) -> {
               switch (method.getName()) {
+                case "execute":
+                  executedSql.add((String) args[0]);
+                  return false;
+                case "getUpdateCount":
+                  // The first statement reports its update count, then reports none once
+                  // getMoreResults has been called, which is how the execution loop terminates.
+                  return moreResults.get() ? -1 : 0;
+                case "getMoreResults":
+                  moreResults.set(true);
+                  return false;
                 case "executeUpdate":
                   executedSql.add((String) args[0]);
                   return 0;

@@ -41,7 +41,8 @@ public class TestSparkCatalogKind {
     Assertions.assertEquals(SparkCatalogKind.JDBC, SparkCatalogKind.fromProvider("jdbc-starrocks"));
     Assertions.assertEquals(
         SparkCatalogKind.JDBC_POSTGRESQL, SparkCatalogKind.fromProvider("jdbc-postgresql"));
-    Assertions.assertEquals(SparkCatalogKind.JDBC_ORACLE, SparkCatalogKind.fromProvider("jdbc-oracle"));
+    Assertions.assertEquals(
+        SparkCatalogKind.JDBC_ORACLE, SparkCatalogKind.fromProvider("jdbc-oracle"));
     Assertions.assertEquals(
         SparkCatalogKind.JDBC_SQLSERVER, SparkCatalogKind.fromProvider("jdbc-sqlserver"));
   }
