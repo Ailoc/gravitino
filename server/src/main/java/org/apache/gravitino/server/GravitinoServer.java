@@ -36,6 +36,7 @@ import org.apache.gravitino.catalog.FunctionDispatcher;
 import org.apache.gravitino.catalog.ModelDispatcher;
 import org.apache.gravitino.catalog.PartitionDispatcher;
 import org.apache.gravitino.catalog.SchemaDispatcher;
+import org.apache.gravitino.catalog.SemanticModelDispatcher;
 import org.apache.gravitino.catalog.TableDispatcher;
 import org.apache.gravitino.catalog.TopicDispatcher;
 import org.apache.gravitino.catalog.ViewDispatcher;
@@ -72,6 +73,7 @@ import org.apache.gravitino.server.web.mapper.JsonProcessingExceptionMapper;
 import org.apache.gravitino.server.web.mapper.NotFoundExceptionMapper;
 import org.apache.gravitino.server.web.mapper.ParamExceptionMapper;
 import org.apache.gravitino.server.web.mapper.WebApplicationExceptionMapper;
+import org.apache.gravitino.server.web.rest.SemanticModelSourceValidator;
 import org.apache.gravitino.server.web.ui.WebUIFilter;
 import org.apache.gravitino.stats.StatisticDispatcher;
 import org.apache.gravitino.tag.TagDispatcher;
@@ -94,8 +96,8 @@ public class GravitinoServer extends ResourceConfig {
   // audit-on-failure coverage. VersioningFilter is intentionally not applied to these: it
   // negotiates Gravitino's "application/vnd.gravitino.vN+json" media type for the Jersey-managed
   // REST surface, and none of these servlets are part of it or read that header. /metrics and
-  // /prometheus/metrics are registered by JettyServer#initialize() itself (see server-common's
-  // JettyServer), outside GravitinoServer's own control entirely. See GH-12760.
+  // /prometheus/metrics are registered directly on JettyServer's servlet context, outside the
+  // Jersey-managed REST surface. See GH-12760.
   private static final ImmutableList<String> ROOT_MOUNTED_PATHS =
       ImmutableList.<String>builder()
           .add("/configs")
@@ -131,6 +133,7 @@ public class GravitinoServer extends ResourceConfig {
     JettyServerConfig jettyServerConfig =
         JettyServerConfig.fromConfig(serverConfig, WEBSERVER_CONF_PREFIX);
     server.initialize(jettyServerConfig, SERVER_NAME);
+    server.addMetricsServlets(gravitinoEnv.metricsSystem());
 
     ServerAuthenticator.getInstance().initialize(serverConfig);
 
@@ -140,14 +143,14 @@ public class GravitinoServer extends ResourceConfig {
         new LineageConfig(serverConfig.getConfigsWithPrefix(LineageConfig.LINEAGE_CONFIG_PREFIX)));
 
     // initialize Jersey REST API resources.
-    initializeRestApi();
+    initializeRestApi(jettyServerConfig);
   }
 
   public ServerConfig serverConfig() {
     return serverConfig;
   }
 
-  private void initializeRestApi() {
+  private void initializeRestApi(JettyServerConfig jettyServerConfig) {
     HashSet<String> restApiPackagesSet = new HashSet<>();
     restApiPackagesSet.add("org.apache.gravitino.server.web.rest");
     restApiPackagesSet.addAll(serverConfig.get(Configs.REST_API_EXTENSION_PACKAGES));
@@ -167,6 +170,7 @@ public class GravitinoServer extends ResourceConfig {
             bind(gravitinoEnv.metalakeDispatcher()).to(MetalakeDispatcher.class).ranked(1);
             bind(gravitinoEnv.catalogDispatcher()).to(CatalogDispatcher.class).ranked(1);
             bind(gravitinoEnv.schemaDispatcher()).to(SchemaDispatcher.class).ranked(1);
+            bindAsContract(SemanticModelSourceValidator.class);
             bind(gravitinoEnv.tableDispatcher()).to(TableDispatcher.class).ranked(1);
             bind(gravitinoEnv.viewDispatcher()).to(ViewDispatcher.class).ranked(1);
             bind(gravitinoEnv.partitionDispatcher()).to(PartitionDispatcher.class).ranked(1);
@@ -183,6 +187,9 @@ public class GravitinoServer extends ResourceConfig {
             bind(gravitinoEnv.secretProviderRegistry()).to(SecretProviderRegistry.class).ranked(1);
             bind(gravitinoEnv.modelDispatcher()).to(ModelDispatcher.class).ranked(1);
             bind(gravitinoEnv.functionDispatcher()).to(FunctionDispatcher.class).ranked(1);
+            bind(gravitinoEnv.semanticModelDispatcher())
+                .to(SemanticModelDispatcher.class)
+                .ranked(1);
             bind(lineageService).to(LineageDispatcher.class).ranked(1);
             bind(gravitinoEnv.jobOperationDispatcher()).to(JobOperationDispatcher.class).ranked(1);
             bind(gravitinoEnv.statisticDispatcher()).to(StatisticDispatcher.class).ranked(1);
@@ -196,7 +203,8 @@ public class GravitinoServer extends ResourceConfig {
     register(ParamExceptionMapper.class);
     register(NotFoundExceptionMapper.class);
     register(WebApplicationExceptionMapper.class);
-    register(ObjectMapperProvider.class).register(JacksonFeature.class);
+    register(new ObjectMapperProvider(jettyServerConfig.isIncludeErrorStackTrace()))
+        .register(JacksonFeature.class);
     property(CommonProperties.JSON_JACKSON_DISABLED_MODULES, "DefaultScalaModule");
 
     if (!enableAuthorization) {
@@ -227,7 +235,8 @@ public class GravitinoServer extends ResourceConfig {
     server.addFilter(new RequestContextFilter(gravitinoEnv.eventBus()), API_ANY_PATH);
     server.addFilter(
         new HttpAuditFilter(gravitinoEnv.eventBus(), EventSource.GRAVITINO_SERVER), API_ANY_PATH);
-    server.addFilter(new VersioningFilter(), API_ANY_PATH);
+    server.addFilter(
+        new VersioningFilter(jettyServerConfig.isIncludeErrorStackTrace()), API_ANY_PATH);
 
     // GH-12760: servlets mounted outside API_ANY_PATH used to receive none of the filters below
     // (no request-context tracking, no audit-on-failure, no custom filters), with nothing in the

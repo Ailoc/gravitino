@@ -133,6 +133,9 @@ public enum TestDatabaseName {
   },
   PG_ICEBERG_AUTHZ_IT,
 
+  /** Represents the PostgreSQL database for experimental Iceberg authorization tests. */
+  PG_ICEBERG_EXPERIMENTAL_AUTHZ_IT,
+
   PG_ICEBERG_ASYNC_CLEANUP_IT,
 
   /** Represents the SQL Server database for CatalogSqlServerIT and its version subclasses. */
