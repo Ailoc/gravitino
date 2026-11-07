@@ -587,9 +587,13 @@ public class TestOracleTableOperationsSqlGeneration {
         singleAlterSql(TableChange.updateColumnNullability(new String[] {"col1"}, false)));
   }
 
-  /** A column whose default is NULL cannot be made NOT NULL without dropping the default first. */
+  /**
+   * A nullable column with no default loads with a NULL default, which must not block making it NOT
+   * NULL. Oracle spells a NULL default DEFAULT NULL, which is equivalent to having none, so the
+   * nullability change needs no separate default drop.
+   */
   @Test
-  public void testAlterTableUpdateColumnToNotNullRejectsNullDefault() {
+  public void testAlterTableUpdateColumnToNotNullWithNullDefault() {
     JdbcColumn col =
         JdbcColumn.builder()
             .withName("col1")
@@ -598,9 +602,9 @@ public class TestOracleTableOperationsSqlGeneration {
             .build();
     ops.withLazyLoadTable(tableOf(col));
 
-    Assertions.assertThrows(
-        IllegalArgumentException.class,
-        () -> alterSql(TableChange.updateColumnNullability(new String[] {"col1"}, false)));
+    Assertions.assertEquals(
+        "ALTER TABLE " + QUOTED + " MODIFY (\"col1\" NOT NULL)",
+        singleAlterSql(TableChange.updateColumnNullability(new String[] {"col1"}, false)));
   }
 
   @Test

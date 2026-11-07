@@ -141,7 +141,13 @@ public class OracleColumnDefaultValueConverter extends JdbcColumnDefaultValueCon
       throw new UnsupportedOperationException(
           "Oracle has no time-of-day type, so a TIME column cannot carry a default value.");
     }
-    return quoteLiteral(literal.value());
+    return quoteStringLiteral(String.valueOf(literal.value()));
+  }
+
+  /** Oracle treats backslashes literally, so only single quotes are doubled. */
+  @Override
+  protected String quoteStringLiteral(String value) {
+    return "'" + value.replace("'", "''") + "'";
   }
 
   @Override

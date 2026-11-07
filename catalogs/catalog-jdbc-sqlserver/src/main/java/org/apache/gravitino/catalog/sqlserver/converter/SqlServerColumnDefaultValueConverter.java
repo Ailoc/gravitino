@@ -63,6 +63,12 @@ public class SqlServerColumnDefaultValueConverter extends JdbcColumnDefaultValue
   /** Shares the column type mapping, so a decimal default carries its own column's precision. */
   private static final SqlServerTypeConverter TYPE_CONVERTER = new SqlServerTypeConverter();
 
+  /** T-SQL treats backslashes literally, so only single quotes are doubled. */
+  @Override
+  protected String quoteStringLiteral(String value) {
+    return "'" + value.replace("'", "''") + "'";
+  }
+
   @Override
   public Expression toGravitino(
       JdbcTypeConverter.JdbcTypeBean type,
