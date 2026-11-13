@@ -82,11 +82,13 @@ import org.apache.gravitino.credential.CredentialConstants;
 import org.apache.gravitino.exceptions.CatalogAlreadyExistsException;
 import org.apache.gravitino.exceptions.CatalogNotInUseException;
 import org.apache.gravitino.exceptions.ConnectionFailedException;
+import org.apache.gravitino.exceptions.ForbiddenException;
 import org.apache.gravitino.exceptions.GravitinoRuntimeException;
 import org.apache.gravitino.exceptions.NoSuchCatalogException;
 import org.apache.gravitino.exceptions.NoSuchEntityException;
 import org.apache.gravitino.exceptions.NoSuchMetalakeException;
 import org.apache.gravitino.exceptions.NoSuchSchemaException;
+import org.apache.gravitino.exceptions.NonEmptyCatalogException;
 import org.apache.gravitino.exceptions.OptimisticLockException;
 import org.apache.gravitino.lock.LockManager;
 import org.apache.gravitino.lock.LockType;
@@ -1008,6 +1010,38 @@ public class TestCatalogManager {
         () -> catalogManager.alterCatalog(ident, CatalogChange.removeProperty("validation-max")));
     Assertions.assertEquals(
         "4", catalogManager.loadCatalog(ident).properties().get("validation-max"));
+  }
+
+  @Test
+  public void testCreateCatalogPropagatesBackendForbidden() throws Exception {
+    // The create-time probe reports that the backend refuses the configured credentials: the
+    // ForbiddenException must reach the caller unwrapped, and creation must roll back the cache and
+    // the store.
+    NameIdentifier forbidIdent = NameIdentifier.of("metalake", "verify-testconn-forbid");
+    Map<String, String> forbidProps =
+        Maps.newHashMap(
+            ImmutableMap.of(
+                PROPERTY_KEY1,
+                "value1",
+                PROPERTY_KEY2,
+                "value2",
+                PROPERTY_KEY5_PREFIX + "1",
+                "value3",
+                TestCatalogOperations.VALIDATE_ON_CREATE,
+                "true",
+                TestCatalogOperations.FORBID_TEST,
+                "true"));
+    ForbiddenException exception =
+        Assertions.assertThrows(
+            ForbiddenException.class,
+            () ->
+                catalogManager.createCatalog(
+                    forbidIdent, Catalog.Type.RELATIONAL, provider, "comment", forbidProps));
+    Assertions.assertEquals("Backend denied access", exception.getMessage());
+    Assertions.assertNull(catalogManager.getCatalogCache().getIfPresent(forbidIdent));
+    Assertions.assertThrows(
+        NoSuchEntityException.class,
+        () -> entityStore.get(forbidIdent, EntityType.CATALOG, CatalogEntity.class));
   }
 
   @Test
@@ -1943,6 +1977,53 @@ public class TestCatalogManager {
   }
 
   @Test
+  void testRefusedDropKeepsDisabledCatalogNotInUse() throws Exception {
+    InMemoryEntityStore store = new InMemoryEntityStore();
+    store.initialize(config);
+    store.put(metalakeEntity, true);
+    CatalogManager manager =
+        new CatalogManager(config, store, new RandomIdGenerator(), new SecretManager(config));
+
+    NameIdentifier ident = NameIdentifier.of("metalake", "refused_drop");
+    Map<String, String> props =
+        ImmutableMap.of(
+            "provider",
+            "test",
+            PROPERTY_KEY1,
+            "value1",
+            PROPERTY_KEY2,
+            "value2",
+            PROPERTY_KEY5_PREFIX + "1",
+            "value3",
+            BaseCatalog.CATALOG_OPERATION_IMPL,
+            SingleSchemaCatalogOperations.class.getName());
+    manager.createCatalog(ident, Catalog.Type.RELATIONAL, provider, "comment", props);
+    store.put(
+        SchemaEntity.builder()
+            .withId(RandomIdGenerator.INSTANCE.nextId())
+            .withName(SingleSchemaCatalogOperations.SCHEMA_NAME)
+            .withNamespace(Namespace.of("metalake", "refused_drop"))
+            .withAuditInfo(
+                AuditInfo.builder()
+                    .withCreator(PrincipalUtils.getCurrentPrincipal().getName())
+                    .withCreateTime(Instant.now())
+                    .build())
+            .build());
+
+    manager.disableCatalog(ident);
+    Assertions.assertThrows(
+        NonEmptyCatalogException.class, () -> manager.dropCatalog(ident, false));
+
+    // The operations built while checking schemas for the refused drop must not be reused by
+    // later calls on the disabled catalog.
+    Namespace schemaNs = Namespace.of("metalake", "refused_drop");
+    Assertions.assertThrows(
+        CatalogNotInUseException.class,
+        () -> manager.loadCatalogAndWrap(ident).doWithSchemaOps(ops -> ops.listSchemas(schemaNs)));
+    manager.close();
+  }
+
+  @Test
   public void testForceDropCatalog() throws Exception {
     NameIdentifier ident = NameIdentifier.of("metalake", "test41");
     Map<String, String> props =
@@ -2809,5 +2890,24 @@ public class TestCatalogManager {
         TestReferenceSecretsProvider.class.getName());
     c.loadFromProperties(p);
     return new SecretManager(c);
+  }
+
+  /** Catalog operations whose backend always holds one user-created schema. */
+  public static class SingleSchemaCatalogOperations extends TestCatalogOperations {
+    static final String SCHEMA_NAME = "existing_schema";
+
+    public SingleSchemaCatalogOperations() {
+      super(ImmutableMap.of());
+    }
+
+    @Override
+    public NameIdentifier[] listSchemas(Namespace namespace) {
+      return new NameIdentifier[] {NameIdentifier.of(namespace, SCHEMA_NAME)};
+    }
+
+    @Override
+    public Schema loadSchema(NameIdentifier ident) {
+      return Mockito.mock(Schema.class);
+    }
   }
 }

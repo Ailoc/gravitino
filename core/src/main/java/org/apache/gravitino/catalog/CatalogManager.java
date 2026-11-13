@@ -94,6 +94,7 @@ import org.apache.gravitino.exceptions.CatalogAlreadyExistsException;
 import org.apache.gravitino.exceptions.CatalogInUseException;
 import org.apache.gravitino.exceptions.CatalogNotInUseException;
 import org.apache.gravitino.exceptions.ConnectionFailedException;
+import org.apache.gravitino.exceptions.ForbiddenException;
 import org.apache.gravitino.exceptions.GravitinoRuntimeException;
 import org.apache.gravitino.exceptions.NoSuchCatalogException;
 import org.apache.gravitino.exceptions.NoSuchEntityException;
@@ -1451,22 +1452,24 @@ public class CatalogManager implements CatalogDispatcher, Closeable {
               }
               secretManager.deleteSecretsFromProperties(catalogProperties);
             }
-            catalogCache.invalidate(ident);
             return deleted;
 
           } catch (NoSuchMetalakeException | NoSuchCatalogException ignored) {
             return false;
           } catch (NoSuchEntityException ignored) {
             // Another server deleted the catalog after it was loaded above, so a later store read
-            // such as listing its schemas no longer finds it. The drop stays idempotent, but the
-            // wrapper cached by loadCatalogAndWrap has to be discarded. store.delete itself never
-            // reaches here: it maps a missing entity to false on its own.
-            catalogCache.invalidate(ident);
+            // such as listing its schemas no longer finds it. The drop stays idempotent.
+            // store.delete itself never reaches here: it maps a missing entity to false on its own.
             return false;
           } catch (GravitinoRuntimeException e) {
             throw e;
           } catch (Exception e) {
             throw new RuntimeException(e);
+          } finally {
+            // Discard the wrapper on every outcome. Operations initialized during the drop skip the
+            // catalog in-use check, so a refused or failed drop must not leave them cached for
+            // later calls on a disabled catalog.
+            catalogCache.invalidate(ident);
           }
         });
   }
@@ -1921,7 +1924,8 @@ public class CatalogManager implements CatalogDispatcher, Closeable {
             // Validate opted-in catalogs so a misconfiguration fails at create rather than on
             // first use. The default validation eagerly initializes ops(); JDBC overrides it to
             // run a real backend probe. The backend translates failures into the caller-error vs
-            // dependency-unavailable taxonomy; both types are forwarded by the passthrough below.
+            // dependency-unavailable taxonomy; both types are forwarded by the passthrough below,
+            // as is ForbiddenException when the backend refuses the configured credentials.
             // The backend probe is gated by validateBackend so the standalone testConnection path
             // can keep property validation while running its own explicit probe instead.
             if (validateBackend && propsToValidate != null && catalog.shouldValidateOnCreate()) {
@@ -1930,7 +1934,8 @@ public class CatalogManager implements CatalogDispatcher, Closeable {
             return null;
           },
           IllegalArgumentException.class,
-          ConnectionFailedException.class);
+          ConnectionFailedException.class,
+          ForbiddenException.class);
     } catch (RuntimeException e) {
       // Close the partially-initialized catalog (which releases its authorizationPlugin and other
       // resources) before the caller tears down or releases the ClassLoader. Otherwise a creation

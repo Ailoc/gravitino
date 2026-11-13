@@ -701,7 +701,8 @@ public abstract class JdbcTableOperations implements TableOperation {
    * @return The SQL statement to rename a table
    */
   protected String generateRenameTableSql(String oldTableName, String newTableName) {
-    return String.format("RENAME TABLE `%s` TO `%s`", oldTableName, newTableName);
+    return String.format(
+        "RENAME TABLE %s TO %s", quoteIdentifier(oldTableName), quoteIdentifier(newTableName));
   }
 
   /**
@@ -712,7 +713,7 @@ public abstract class JdbcTableOperations implements TableOperation {
    * @return The SQL statement to drop a table
    */
   protected String generateDropTableSql(String tableName) {
-    return String.format("DROP TABLE `%s`", tableName);
+    return "DROP TABLE " + quoteIdentifier(tableName);
   }
 
   protected abstract String generatePurgeTableSql(String tableName);
@@ -868,7 +869,7 @@ public abstract class JdbcTableOperations implements TableOperation {
                 throw new IllegalArgumentException(
                     "Index does not support complex fields in this Catalog");
               }
-              return String.format("`%s`", colNames[0]);
+              return JdbcConnectorUtils.quoteIdentifier(colNames[0], '`');
             })
         .collect(Collectors.joining(", "));
   }
@@ -1075,6 +1076,6 @@ public abstract class JdbcTableOperations implements TableOperation {
   }
 
   protected String quoteIdentifier(String identifier) {
-    return "`" + identifier + "`";
+    return JdbcConnectorUtils.quoteIdentifier(identifier, '`');
   }
 }

@@ -24,7 +24,29 @@ plugins {
   id("idea")
 }
 
+// Keeps the Jackson line brought in by Iceberg on its latest patch release and the Netty artifacts
+// brought in by the AWS SDK on the single version of the catalog. The BOMs sit in dedicated
+// configurations so that they only apply to this module and are not exported to the modules that
+// depend on it.
+val jacksonBom: Configuration by configurations.creating {
+  isCanBeConsumed = false
+  isCanBeResolved = false
+}
+val nettyBom: Configuration by configurations.creating {
+  isCanBeConsumed = false
+  isCanBeResolved = false
+}
+listOf(
+  "compileClasspath",
+  "runtimeClasspath",
+  "testCompileClasspath",
+  "testRuntimeClasspath"
+).forEach {
+  configurations.named(it) { extendsFrom(jacksonBom, nettyBom) }
+}
 dependencies {
+  jacksonBom(platform(libs.jackson.bom.v221))
+  nettyBom(platform(libs.netty.bom))
   compileOnly(project(":api"))
   compileOnly(project(":common"))
   compileOnly(project(":core"))
